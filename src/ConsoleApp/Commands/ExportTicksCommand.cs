@@ -1,3 +1,4 @@
+using HistoricalData.Commands.Options;
 using HistoricalData.Utils;
 
 namespace HistoricalData.Commands;
@@ -14,28 +15,40 @@ namespace HistoricalData.Commands;
 /// calendar month. Long-history exports for a single symbol can produce
 /// hundreds of files; that's intentional, MT5's Symbol Editor imports a
 /// month at a time.
-///
-/// Args (all optional):
-///   --instrument SYMBOL or --symbols SYMBOL1,SYMBOL2,...|all
-///   --start ISO8601    --end ISO8601
-///   --offset +HH:MM
-///   --pool PATH    --output PATH
-///   --no-prompt
-///   --quiet
 /// </summary>
 public sealed class ExportTicksCommand : ICommand
 {
     public Task<int> RunAsync(string[] args)
     {
         var argMap = ArgParser.Parse(args);
-        var options = AppOptions.FromArgs(argMap);
+        var options = TickExportOptions.FromArgs(argMap);
+        return Program.RunDownloadFlow(ToAppOptions(options));
+    }
 
-        // Export-ticks invariants: cache-only (no network), no bar exports,
-        // tick CSV pass enabled. The legacy bar pipeline still runs in Layer 1
-        // (some wasted aggregation work that Layer 3 will remove); the
-        // OutputFormat=None ensures it doesn't produce any bar files.
-        options = options with
+    /// <summary>
+    /// Bridge to the legacy engine: project TickExportOptions onto AppOptions
+    /// and apply the export-ticks invariants (cache-only, no bar exports,
+    /// tick CSV pass enabled). Layer 3 will replace this with a direct call
+    /// to a tick-export entry point that takes TickExportOptions.
+    /// </summary>
+    internal static AppOptions ToAppOptions(TickExportOptions options)
+    {
+        return AppOptions.Defaults with
         {
+            Instrument = options.Instrument,
+            Instruments = options.Instruments,
+            Start = options.Start,
+            End = options.End,
+            UtcOffset = options.UtcOffset,
+            DataPoolPath = options.PoolPath,
+            OutputPath = options.OutputPath,
+            HttpConfigPath = options.HttpConfigPath,
+            InstrumentsPath = options.InstrumentsConfigPath,
+            Digits = options.Digits,
+            DigitsMap = options.DigitsMap,
+            NonInteractive = options.NonInteractive,
+            Verbose = options.Verbose,
+            // Export-ticks invariants — cache-only, tick CSV pass on, no bar exports.
             DownloadMode = DownloadMode.TickToM1,
             RefreshCache = false,
             RecentRefreshDays = 0,
@@ -45,7 +58,5 @@ public sealed class ExportTicksCommand : ICommand
             OutputFormat = OutputFormat.None,
             ExportTicks = true
         };
-
-        return Program.RunDownloadFlow(options);
     }
 }
