@@ -518,18 +518,27 @@ public static class Program
         summary.DuplicateTicksDropped = aggregator.DuplicateTicksDropped;
         summary.FallbackBarsSkipped = aggregator.FallbackBarsSkipped;
 
-        var csvPath = Path.Combine(outputPath, $"{options.Instrument}_{options.Timeframe}.csv");
-        CsvWriter.Write(csvPath, bars);
-
+        // Bar export step. Skipped entirely when format=None (used by `cache update`,
+        // which only fills the pool and shouldn't produce export artifacts).
+        string? csvPath = null;
         string? hstPath = null;
-        if (options.OutputFormat == OutputFormat.CsvHst)
+        if (options.OutputFormat != OutputFormat.None)
         {
-            hstPath = Path.Combine(outputPath, $"{options.Instrument}_{options.Timeframe}.hst");
-            HstWriter.Write(hstPath, bars, options.Instrument, digits, timeframeMinutes);
+            csvPath = Path.Combine(outputPath, $"{options.Instrument}_{options.Timeframe}.csv");
+            CsvWriter.Write(csvPath, bars);
+
+            if (options.OutputFormat == OutputFormat.CsvHst)
+            {
+                hstPath = Path.Combine(outputPath, $"{options.Instrument}_{options.Timeframe}.hst");
+                HstWriter.Write(hstPath, bars, options.Instrument, digits, timeframeMinutes);
+            }
         }
 
         summary.Print();
-        Console.WriteLine($"CSV: {csvPath}");
+        if (csvPath is not null)
+        {
+            Console.WriteLine($"CSV: {csvPath}");
+        }
         if (hstPath is not null)
         {
             Console.WriteLine($"HST: {hstPath}");

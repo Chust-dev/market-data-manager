@@ -110,9 +110,13 @@ public sealed record AppOptions(
                 : d.DownloadMode;
 
         var format = args.GetValueOrDefault("format");
-        var outputFormat = format?.Equals("csv", StringComparison.OrdinalIgnoreCase) == true
-            ? OutputFormat.CsvOnly
-            : OutputFormat.CsvHst;
+        var outputFormat = format?.ToLowerInvariant() switch
+        {
+            "csv" => OutputFormat.CsvOnly,
+            "csv+hst" => OutputFormat.CsvHst,
+            "none" => OutputFormat.None,
+            _ => OutputFormat.CsvHst
+        };
 
         var offset = TimeSpanParser.TryParse(args.GetValueOrDefault("offset"), d.UtcOffset);
         var verbose = !args.ContainsKey("quiet");
