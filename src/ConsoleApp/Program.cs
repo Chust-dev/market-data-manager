@@ -204,6 +204,7 @@ public static class Program
         ICommand? command = (args[0].ToLowerInvariant(), args.Length > 1 ? args[1].ToLowerInvariant() : "") switch
         {
             ("cache", "audit") => new CacheAuditCommand(),
+            ("cache", "update") => new CacheUpdateCommand(),
             _ => null
         };
 
