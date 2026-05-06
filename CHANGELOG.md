@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Refactor (Layer 2)**: Each subcommand now has its own typed options record (`CacheAuditOptions`, `CacheUpdateOptions`, `BarExportOptions`, `TickExportOptions`) parsed via shared `CommonParsingHelpers`. The four commands no longer share one "god record" of every possible option. Legacy `AppOptions` remains as a transitional bridge to the engine; Layer 3 will replace it with command-specific entry points.
 - **Refactor (Layer 1)**: Introduced subcommand CLI surface — `cache update`, `cache audit`, `export bars`, `export ticks`. Each subcommand is a dedicated class implementing `ICommand`. The legacy flat-flag invocation (`--instrument X --start Y ...`) continues to work as a compatibility shim. Internal pipeline extracted into `Program.RunDownloadFlow` for reuse.
 - Added `OutputFormat.None` so `cache update` can run the engine without producing any bar export files.
 - Added `--audit` flag: prints a fast (no-decompression) summary of cached `.bi5` files in the pool — per-symbol date range, file counts, coverage rate, disk usage, and empty-file detection.
