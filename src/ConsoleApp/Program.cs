@@ -1,4 +1,5 @@
 using HistoricalData.Audit;
+using HistoricalData.Commands;
 using HistoricalData.Config;
 using HistoricalData.DataPool;
 using HistoricalData.Export;
@@ -15,6 +16,19 @@ public static class Program
         {
             PrintHelp();
             return 0;
+        }
+
+        // Subcommand routing: peek at the first token. If it matches a known
+        // verb, dispatch to the matching command class. Otherwise fall through
+        // to the legacy flat-flag handling below so existing scripts keep
+        // working unchanged.
+        if (args.Length > 0)
+        {
+            var dispatch = await TryDispatchSubcommandAsync(args);
+            if (dispatch.Handled)
+            {
+                return dispatch.ExitCode;
+            }
         }
 
         var argMap = ArgParser.Parse(args);
@@ -158,7 +172,38 @@ public static class Program
         return failed == 0 ? 0 : 1;
     }
 
-    private static int RunAudit(AppOptions options, bool instrumentExplicit)
+    /// <summary>
+    /// Routes verbs like `cache audit` to the matching <see cref="ICommand"/>.
+    /// Returns Handled=false if the args don't begin with a recognised verb,
+    /// so the caller can fall through to legacy flat-flag handling.
+    /// </summary>
+    private static async Task<(bool Handled, int ExitCode)> TryDispatchSubcommandAsync(string[] args)
+    {
+        // Verbs are two-token: "cache audit", "export bars", etc. Anything
+        // starting with "--" is definitely not a verb.
+        if (args[0].StartsWith("--", StringComparison.Ordinal))
+        {
+            return (false, 0);
+        }
+
+        ICommand? command = (args[0].ToLowerInvariant(), args.Length > 1 ? args[1].ToLowerInvariant() : "") switch
+        {
+            ("cache", "audit") => new CacheAuditCommand(),
+            _ => null
+        };
+
+        if (command is null)
+        {
+            return (false, 0);
+        }
+
+        // Pass the remaining args (after the verb) to the command.
+        var commandArgs = args.Skip(2).ToArray();
+        var exitCode = await command.RunAsync(commandArgs);
+        return (true, exitCode);
+    }
+
+    internal static int RunAudit(AppOptions options, bool instrumentExplicit)
     {
         var poolPath = PathUtils.NormalizePath(options.DataPoolPath);
         var auditor = new PoolAuditor(poolPath);

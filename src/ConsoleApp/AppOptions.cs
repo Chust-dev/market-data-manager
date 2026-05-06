@@ -11,7 +11,12 @@ public enum DownloadMode
 public enum OutputFormat
 {
     CsvOnly,
-    CsvHst
+    CsvHst,
+
+    /// <summary>Don't write any bar export files. Used by `cache update`,
+    /// which only fills the .bi5 pool and leaves the export step to a
+    /// separate `export bars` invocation.</summary>
+    None
 }
 
 public sealed record AppOptions(
