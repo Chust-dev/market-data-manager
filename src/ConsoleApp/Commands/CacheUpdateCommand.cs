@@ -1,3 +1,4 @@
+using HistoricalData.Commands.Options;
 using HistoricalData.Utils;
 
 namespace HistoricalData.Commands;
@@ -10,34 +11,48 @@ namespace HistoricalData.Commands;
 /// every requested hour is fetched fresh; pass `--no-refresh` to use
 /// the cache for files older than `--recent-refresh-days` (default 30).
 /// Useful as a daily/weekly maintenance pass.
-///
-/// Args (all optional):
-///   --instrument SYMBOL or --symbols SYMBOL1,SYMBOL2,...|all
-///   --start ISO8601    --end ISO8601
-///   --mode ticks|direct
-///   --offset +HH:MM
-///   --pool PATH
-///   --no-refresh, --recent-refresh-days N
-///   --verify-checksum, --no-verify-checksum
-///   --no-validate-m1, --no-repair-gaps
-///   --no-prompt
-///   --quiet
 /// </summary>
 public sealed class CacheUpdateCommand : ICommand
 {
     public Task<int> RunAsync(string[] args)
     {
         var argMap = ArgParser.Parse(args);
-        var options = AppOptions.FromArgs(argMap);
+        var options = CacheUpdateOptions.FromArgs(argMap);
+        return Program.RunDownloadFlow(ToAppOptions(options));
+    }
 
-        // Cache-update invariants: this command's job is the .bi5 pool only.
-        // Force off any export-related options the user might have passed.
-        options = options with
+    /// <summary>
+    /// Bridge to the legacy engine: project CacheUpdateOptions onto AppOptions
+    /// and apply the cache-update invariants (no bar exports, no tick CSV).
+    /// Layer 3 will replace <see cref="Program.RunDownloadFlow"/> with a
+    /// dedicated cache-update entry point that takes CacheUpdateOptions
+    /// directly, removing the need for this conversion.
+    /// </summary>
+    internal static AppOptions ToAppOptions(CacheUpdateOptions options)
+    {
+        return AppOptions.Defaults with
         {
+            Instrument = options.Instrument,
+            Instruments = options.Instruments,
+            Start = options.Start,
+            End = options.End,
+            DownloadMode = options.DownloadMode,
+            DataPoolPath = options.PoolPath,
+            HttpConfigPath = options.HttpConfigPath,
+            InstrumentsPath = options.InstrumentsConfigPath,
+            RefreshCache = options.RefreshCache,
+            RecentRefreshDays = options.RecentRefreshDays,
+            VerifyChecksum = options.VerifyChecksum,
+            RepairGaps = options.RepairGaps,
+            ValidateM1 = options.ValidateM1,
+            ValidationTolerancePoints = options.ValidationTolerancePoints,
+            Digits = options.Digits,
+            DigitsMap = options.DigitsMap,
+            NonInteractive = options.NonInteractive,
+            Verbose = options.Verbose,
+            // Cache-update invariants — no exports produced.
             OutputFormat = OutputFormat.None,
             ExportTicks = false
         };
-
-        return Program.RunDownloadFlow(options);
     }
 }
