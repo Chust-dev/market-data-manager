@@ -1,0 +1,33 @@
+{
+  "digits": {
+    "AUDCAD": 5,
+    "AUDCHF": 5,
+    "AUDJPY": 3,
+    "AUDNZD": 5,
+    "AUDUSD": 5,
+    "CADCHF": 5,
+    "CADJPY": 3,
+    "CHFJPY": 3,
+    "EURAUD": 5,
+    "EURCAD": 5,
+    "EURCHF": 5,
+    "EURGBP": 5,
+    "EURJPY": 3,
+    "EURNZD": 5,
+    "EURUSD": 5,
+    "GBPAUD": 5,
+    "GBPCAD": 5,
+    "GBPCHF": 5,
+    "GBPJPY": 3,
+    "GBPNZD": 5,
+    "GBPUSD": 5,
+    "NZDCAD": 5,
+    "NZDCHF": 5,
+    "NZDJPY": 3,
+    "NZDUSD": 5,
+    "USDCAD": 5,
+    "USDCHF": 5,
+    "USDJPY": 3,
+    "XAUUSD": 3
+  }
+}

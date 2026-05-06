@@ -1,0 +1,95 @@
+name: Build Release Artifacts
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Test
+        run: dotnet test --configuration Release
+
+  build:
+    name: Build ${{ matrix.runtime }}
+    runs-on: ${{ matrix.os }}
+    needs: test
+    env:
+      SIGNING_PFX: ${{ secrets.SIGNING_PFX }}
+      SIGNING_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: win-x64
+            os: windows-latest
+          - runtime: linux-x64
+            os: ubuntu-latest
+          - runtime: osx-x64
+            os: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Publish
+        run: >
+          dotnet publish src/ConsoleApp/HistoricalData.csproj -c Release
+          -r ${{ matrix.runtime }}
+          -p:SelfContained=true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o ./artifacts/${{ matrix.runtime }}
+
+      - name: Decode signing certificate
+        if: matrix.runtime == 'win-x64' && env.SIGNING_PFX != '' && env.SIGNING_PFX_PASSWORD != ''
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String($env:SIGNING_PFX)
+          $pfxPath = Join-Path $env:RUNNER_TEMP "signing.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, $bytes)
+          "PFX_PATH=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Sign Windows executable
+        if: matrix.runtime == 'win-x64' && env.SIGNING_PFX != '' && env.SIGNING_PFX_PASSWORD != ''
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path "./artifacts/${{ matrix.runtime }}" -Filter "*.exe" | Select-Object -First 1
+          if (-not $exe) { throw "No .exe found to sign." }
+          signtool sign /f "$env:PFX_PATH" /p "$env:SIGNING_PFX_PASSWORD" /fd sha256 /td sha256 /tr http://timestamp.digicert.com "$($exe.FullName)"
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          $runtime = "${{ matrix.runtime }}"
+          $output = "HistoricalData-$runtime.zip"
+          Compress-Archive -Path "./artifacts/$runtime/*" -DestinationPath $output -Force
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: HistoricalData-${{ matrix.runtime }}.zip

@@ -1,0 +1,9 @@
+{
+  "baseUrls": [
+    "https://datafeed.dukascopy.com/datafeed",
+    "https://datafeed.dukascopy.com"
+  ],
+  "retryCount": 3,
+  "retryBackoffSeconds": 2,
+  "timeoutSeconds": 30
+}

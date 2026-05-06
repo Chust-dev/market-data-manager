@@ -1,0 +1,12 @@
+{
+  "timeZoneId": "UTC",
+  "sessions": [
+    { "day": "Sunday", "start": "22:00", "end": "24:00" },
+    { "day": "Monday", "start": "00:00", "end": "24:00" },
+    { "day": "Tuesday", "start": "00:00", "end": "24:00" },
+    { "day": "Wednesday", "start": "00:00", "end": "24:00" },
+    { "day": "Thursday", "start": "00:00", "end": "24:00" },
+    { "day": "Friday", "start": "00:00", "end": "22:00" }
+  ],
+  "holidays": []
+}
