@@ -1,5 +1,6 @@
 using HistoricalData.Audit;
 using HistoricalData.Commands;
+using HistoricalData.Commands.Options;
 using HistoricalData.Config;
 using HistoricalData.DataPool;
 using HistoricalData.Export;
@@ -36,7 +37,7 @@ public static class Program
 
         if (options.Audit)
         {
-            return RunAudit(options, instrumentExplicit: argMap.ContainsKey("instrument"));
+            return RunAudit(CacheAuditOptions.FromArgs(argMap));
         }
 
         return await RunDownloadFlow(options);
@@ -235,26 +236,11 @@ public static class Program
         };
     }
 
-    internal static int RunAudit(AppOptions options, bool instrumentExplicit)
+    internal static int RunAudit(CacheAuditOptions options)
     {
-        var poolPath = PathUtils.NormalizePath(options.DataPoolPath);
+        var poolPath = PathUtils.NormalizePath(options.PoolPath);
         var auditor = new PoolAuditor(poolPath);
-
-        IReadOnlyCollection<string>? filter = null;
-        if (!string.IsNullOrWhiteSpace(options.Instruments) && !options.Instruments.Equals("all", StringComparison.OrdinalIgnoreCase))
-        {
-            filter = options.Instruments
-                .Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(s => s.ToUpperInvariant())
-                .ToArray();
-        }
-        else if (instrumentExplicit && !string.IsNullOrWhiteSpace(options.Instrument))
-        {
-            // Only treat --instrument as a filter when the user explicitly passed it.
-            filter = new[] { options.Instrument.ToUpperInvariant() };
-        }
-
-        var report = auditor.Audit(filter);
+        var report = auditor.Audit(options.InstrumentFilter);
         Console.Write(report.Render());
         return report.PoolExists ? 0 : 1;
     }

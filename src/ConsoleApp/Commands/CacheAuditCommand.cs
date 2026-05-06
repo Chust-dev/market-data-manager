@@ -1,3 +1,4 @@
+using HistoricalData.Commands.Options;
 using HistoricalData.Utils;
 
 namespace HistoricalData.Commands;
@@ -16,13 +17,7 @@ public sealed class CacheAuditCommand : ICommand
     public Task<int> RunAsync(string[] args)
     {
         var argMap = ArgParser.Parse(args);
-        var options = AppOptions.FromArgs(argMap);
-
-        // Force audit-mode regardless of whether the legacy --audit flag was
-        // also passed; this command's purpose is the audit and nothing else.
-        options = options with { Audit = true };
-
-        var instrumentExplicit = argMap.ContainsKey("instrument");
-        return Task.FromResult(Program.RunAudit(options, instrumentExplicit));
+        var options = CacheAuditOptions.FromArgs(argMap);
+        return Task.FromResult(Program.RunAudit(options));
     }
 }
