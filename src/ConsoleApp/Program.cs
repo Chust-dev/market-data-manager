@@ -206,6 +206,7 @@ public static class Program
             ("cache", "audit") => new CacheAuditCommand(),
             ("cache", "update") => new CacheUpdateCommand(),
             ("export", "bars") => new ExportBarsCommand(),
+            ("export", "ticks") => new ExportTicksCommand(),
             _ => null
         };
 
