@@ -1,0 +1,182 @@
+using System.Globalization;
+using HistoricalData.Utils;
+
+namespace HistoricalData.Commands;
+
+/// <summary>
+/// Shared parsing helpers used by per-command options builders. Each helper
+/// reads from an argMap and returns a typed value, with defaults that match
+/// the legacy <see cref="AppOptions.Defaults"/> so the new and old CLI
+/// surfaces stay in lockstep until Layer 3 removes AppOptions.
+///
+/// All helpers are pure — no side effects, no shared state, safe to call
+/// in any order.
+/// </summary>
+internal static class CommonParsingHelpers
+{
+    // Pull defaults from the existing AppOptions until Layer 3 inlines them
+    // here. Centralising in one record lets us tweak both CLI surfaces in lockstep.
+    private static AppOptions D => AppOptions.Defaults;
+
+    // -- Single-instrument / symbol-list / filter parsers ---------------------
+
+    public static string ParseInstrument(IReadOnlyDictionary<string, string> args) =>
+        args.GetValueOrDefault("instrument", D.Instrument);
+
+    public static string ParseInstruments(IReadOnlyDictionary<string, string> args) =>
+        args.GetValueOrDefault("symbols", D.Instruments);
+
+    /// <summary>
+    /// Audit-style filter: returns null = no filter (every symbol),
+    /// or a list of symbols (uppercased) when --symbols / --instrument was passed.
+    /// `--symbols all` is treated as no filter.
+    /// </summary>
+    public static IReadOnlyCollection<string>? ParseInstrumentFilter(IReadOnlyDictionary<string, string> args)
+    {
+        var symbols = args.GetValueOrDefault("symbols");
+        if (!string.IsNullOrWhiteSpace(symbols) && !symbols.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return symbols
+                .Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(s => s.ToUpperInvariant())
+                .ToArray();
+        }
+
+        // Only treat --instrument as a filter when explicitly passed (not the default fallback).
+        if (args.ContainsKey("instrument"))
+        {
+            var instrument = args.GetValueOrDefault("instrument");
+            if (!string.IsNullOrWhiteSpace(instrument))
+            {
+                return new[] { instrument.ToUpperInvariant() };
+            }
+        }
+
+        return null;
+    }
+
+    // -- Date / time parsers --------------------------------------------------
+
+    public static (DateTimeOffset Start, DateTimeOffset End) ParseStartEnd(IReadOnlyDictionary<string, string> args)
+    {
+        var start = DateTimeParser.TryParse(args.GetValueOrDefault("start"), D.Start);
+        var end = DateTimeParser.TryParse(args.GetValueOrDefault("end"), D.End);
+        return (start, end);
+    }
+
+    public static TimeSpan ParseUtcOffset(IReadOnlyDictionary<string, string> args) =>
+        TimeSpanParser.TryParse(args.GetValueOrDefault("offset"), D.UtcOffset);
+
+    // -- Path parsers ---------------------------------------------------------
+
+    public static string ParsePoolPath(IReadOnlyDictionary<string, string> args) =>
+        args.GetValueOrDefault("pool", D.DataPoolPath);
+
+    public static string ParseOutputPath(IReadOnlyDictionary<string, string> args) =>
+        args.GetValueOrDefault("output", D.OutputPath);
+
+    public static string ParseHttpConfigPath(IReadOnlyDictionary<string, string> args) =>
+        args.GetValueOrDefault("http", D.HttpConfigPath);
+
+    public static string ParseInstrumentsConfigPath(IReadOnlyDictionary<string, string> args) =>
+        args.GetValueOrDefault("instruments", D.InstrumentsPath);
+
+    public static string ParseSessionConfigPath(IReadOnlyDictionary<string, string> args) =>
+        args.GetValueOrDefault("session-config", D.SessionConfigPath);
+
+    // -- Digits parsers -------------------------------------------------------
+
+    public static int ParseDigits(IReadOnlyDictionary<string, string> args)
+    {
+        var value = args.GetValueOrDefault("digits");
+        if (value is null)
+        {
+            return D.Digits;
+        }
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : D.Digits;
+    }
+
+    public static string ParseDigitsMap(IReadOnlyDictionary<string, string> args) =>
+        args.GetValueOrDefault("digits-map", D.DigitsMap);
+
+    // -- Behaviour flag parsers (booleans that map a CLI flag to options) -----
+
+    public static bool ParseNonInteractive(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("no-prompt");
+
+    public static bool ParseVerbose(IReadOnlyDictionary<string, string> args) =>
+        !args.ContainsKey("quiet");
+
+    public static bool ParseRefreshCache(IReadOnlyDictionary<string, string> args) =>
+        !args.ContainsKey("no-refresh");
+
+    public static bool ParseVerifyChecksum(IReadOnlyDictionary<string, string> args) =>
+        !args.ContainsKey("no-verify-checksum");
+
+    public static bool ParseDeduplicateTicks(IReadOnlyDictionary<string, string> args) =>
+        !args.ContainsKey("no-dedupe");
+
+    public static bool ParseSkipFallbackIfTicked(IReadOnlyDictionary<string, string> args) =>
+        !args.ContainsKey("allow-fallback-overlap");
+
+    public static bool ParseRepairGaps(IReadOnlyDictionary<string, string> args) =>
+        !args.ContainsKey("no-repair-gaps");
+
+    public static bool ParseValidateM1(IReadOnlyDictionary<string, string> args) =>
+        !args.ContainsKey("no-validate-m1");
+
+    public static bool ParseUseSessionCalendar(IReadOnlyDictionary<string, string> args)
+    {
+        if (args.ContainsKey("no-session-calendar")) return false;
+        if (args.ContainsKey("use-session-calendar")) return true;
+        return D.UseSessionCalendar;
+    }
+
+    // -- Numeric parsers ------------------------------------------------------
+
+    public static int ParseRecentRefreshDays(IReadOnlyDictionary<string, string> args)
+    {
+        var value = args.GetValueOrDefault("recent-refresh-days");
+        if (value is null)
+        {
+            return D.RecentRefreshDays;
+        }
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : D.RecentRefreshDays;
+    }
+
+    public static int ParseValidationTolerancePoints(IReadOnlyDictionary<string, string> args)
+    {
+        var value = args.GetValueOrDefault("validation-tolerance-points");
+        if (value is null)
+        {
+            return D.ValidationTolerancePoints;
+        }
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : D.ValidationTolerancePoints;
+    }
+
+    // -- Enum-style parsers ---------------------------------------------------
+
+    public static DownloadMode ParseDownloadMode(IReadOnlyDictionary<string, string> args)
+    {
+        var mode = args.GetValueOrDefault("mode");
+        if (mode is null) return D.DownloadMode;
+        if (mode.Equals("direct", StringComparison.OrdinalIgnoreCase)) return DownloadMode.DirectM1;
+        if (mode.Equals("ticks", StringComparison.OrdinalIgnoreCase)) return DownloadMode.TickToM1;
+        return D.DownloadMode;
+    }
+
+    public static OutputFormat ParseOutputFormat(IReadOnlyDictionary<string, string> args)
+    {
+        var format = args.GetValueOrDefault("format");
+        return format?.ToLowerInvariant() switch
+        {
+            "csv" => OutputFormat.CsvOnly,
+            "csv+hst" => OutputFormat.CsvHst,
+            "none" => OutputFormat.None,
+            _ => D.OutputFormat
+        };
+    }
+
+    public static string ParseTimeframe(IReadOnlyDictionary<string, string> args) =>
+        args.GetValueOrDefault("timeframe", D.Timeframe);
+}
