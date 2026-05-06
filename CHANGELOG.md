@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Refactor (Layer 3)**: Internals reorganized around three pillars matching the cache-centric architecture. The Download pillar (`src/ConsoleApp/Download/Downloader.cs`) is now the only place network calls originate — it fills the `.bi5` cache. The Display pillar (`PoolAuditor`, unchanged) reads the cache without modification. The Export pillar (`src/ConsoleApp/Export/BarExporter.cs`, `TickExporter.cs`) reads the cache and projects it into MT5-compatible files. Each subcommand class now calls exactly one pillar directly, taking its typed options record without translating through `AppOptions`. The legacy flat-flag CLI continues to use the pre-refactor unified engine.
 - **Refactor (Layer 2)**: Each subcommand now has its own typed options record (`CacheAuditOptions`, `CacheUpdateOptions`, `BarExportOptions`, `TickExportOptions`) parsed via shared `CommonParsingHelpers`. The four commands no longer share one "god record" of every possible option. Legacy `AppOptions` remains as a transitional bridge to the engine; Layer 3 will replace it with command-specific entry points.
 - **Refactor (Layer 1)**: Introduced subcommand CLI surface — `cache update`, `cache audit`, `export bars`, `export ticks`. Each subcommand is a dedicated class implementing `ICommand`. The legacy flat-flag invocation (`--instrument X --start Y ...`) continues to work as a compatibility shim. Internal pipeline extracted into `Program.RunDownloadFlow` for reuse.
 - Added `OutputFormat.None` so `cache update` can run the engine without producing any bar export files.

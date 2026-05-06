@@ -31,6 +31,52 @@ audit` reports on the pool's shape (no network). `export bars` and
 MT5-compatible files; they never reach Dukascopy. Run `--help` for the full
 subcommand reference.
 
+## Architecture
+
+The tool is organized around the **`.bi5` data pool as the central asset**,
+with three independent pillars rotating around it:
+
+```text
+                    ┌──────────────────────┐
+                    │   .bi5 data pool     │
+                    │  (D:\MarketData)     │
+                    └──────────┬───────────┘
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+        ▼                      ▼                      ▼
+┌───────────────┐     ┌────────────────┐    ┌─────────────────┐
+│   Download    │     │    Display     │    │     Export      │
+│   (network)   │     │   (read-only)  │    │  (read + write) │
+│   fills cache │     │ inspects cache │    │ projects cache  │
+└───────────────┘     └────────────────┘    └─────────────────┘
+   `cache update`       `cache audit`         `export bars`
+                                              `export ticks`
+```
+
+**Download** is the only pillar that reaches the network. It fills or
+extends the pool, optionally running gap-repair and validation passes
+that fetch additional files. Lives in `src/ConsoleApp/Download/`.
+
+**Display** reads the cache directory tree without modifying or
+decompressing anything — counts files per symbol, computes coverage
+rate, flags zero-byte downloads. Lives in `src/ConsoleApp/Audit/`.
+
+**Export** reads the cache (no network) and projects it into derivative
+artifacts: M1/higher-timeframe bars as MT5 CSV/HST, raw ticks as
+per-month CSV in MT5 Symbol Editor import format. Future formats
+(Parquet, JSON, broker-specific binary) drop in as additional
+exporter classes alongside `BarExporter` and `TickExporter` in
+`src/ConsoleApp/Export/`.
+
+The three pillars are independent: you can run any of them without the
+others, in any order. Cache update doesn't touch exports; exports never
+trigger downloads. Each subcommand calls exactly one pillar.
+
+The legacy flat-flag CLI (`--instrument X --start Y ...`) still works
+and continues to use a unified engine that combines all three pillars'
+work in one run. New scripts should use the subcommand syntax above.
+
 ## End User Guide (Setup and Run)
 
 ### Option A: Download a Release (recommended)
