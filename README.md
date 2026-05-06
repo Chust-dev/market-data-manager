@@ -14,6 +14,23 @@ CI runs `dotnet test` on Windows, macOS, and Linux for pull requests and pushes 
 
 ## Usage
 
+The CLI is organized as **subcommands** that separate cache maintenance from
+data export. The legacy flat-flag interface continues to work for existing
+scripts.
+
+```text
+HistoricalData cache update   --instrument EURUSD --start ... --end ...
+HistoricalData cache audit    [--instrument EURUSD]
+HistoricalData export bars    --instrument EURUSD --start ... --end ... --timeframe m1
+HistoricalData export ticks   --instrument EURUSD --start ... --end ...
+```
+
+`cache update` fills or refreshes the `.bi5` pool (network calls). `cache
+audit` reports on the pool's shape (no network). `export bars` and
+`export ticks` are offline operations that read from the pool and produce
+MT5-compatible files; they never reach Dukascopy. Run `--help` for the full
+subcommand reference.
+
 ## End User Guide (Setup and Run)
 
 ### Option A: Download a Release (recommended)

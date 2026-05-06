@@ -192,7 +192,7 @@ public static class Program
     /// Returns Handled=false if the args don't begin with a recognised verb,
     /// so the caller can fall through to legacy flat-flag handling.
     /// </summary>
-    private static async Task<(bool Handled, int ExitCode)> TryDispatchSubcommandAsync(string[] args)
+    internal static async Task<(bool Handled, int ExitCode)> TryDispatchSubcommandAsync(string[] args)
     {
         // Verbs are two-token: "cache audit", "export bars", etc. Anything
         // starting with "--" is definitely not a verb.
@@ -201,15 +201,7 @@ public static class Program
             return (false, 0);
         }
 
-        ICommand? command = (args[0].ToLowerInvariant(), args.Length > 1 ? args[1].ToLowerInvariant() : "") switch
-        {
-            ("cache", "audit") => new CacheAuditCommand(),
-            ("cache", "update") => new CacheUpdateCommand(),
-            ("export", "bars") => new ExportBarsCommand(),
-            ("export", "ticks") => new ExportTicksCommand(),
-            _ => null
-        };
-
+        ICommand? command = ResolveCommand(args);
         if (command is null)
         {
             return (false, 0);
@@ -219,6 +211,28 @@ public static class Program
         var commandArgs = args.Skip(2).ToArray();
         var exitCode = await command.RunAsync(commandArgs);
         return (true, exitCode);
+    }
+
+    /// <summary>
+    /// Maps `args[0..1]` to a command instance, or null if no verb matched.
+    /// Exposed as <c>internal</c> so the test suite can assert the verb table
+    /// without invoking the (network-touching) <see cref="ICommand.RunAsync"/>.
+    /// </summary>
+    internal static ICommand? ResolveCommand(string[] args)
+    {
+        if (args.Length == 0 || args[0].StartsWith("--", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return (args[0].ToLowerInvariant(), args.Length > 1 ? args[1].ToLowerInvariant() : "") switch
+        {
+            ("cache", "audit") => new CacheAuditCommand(),
+            ("cache", "update") => new CacheUpdateCommand(),
+            ("export", "bars") => new ExportBarsCommand(),
+            ("export", "ticks") => new ExportTicksCommand(),
+            _ => null
+        };
     }
 
     internal static int RunAudit(AppOptions options, bool instrumentExplicit)
@@ -248,7 +262,18 @@ public static class Program
     private static void PrintHelp()
     {
         Console.WriteLine("Dukascopy Historical Tick Downloader");
-        Console.WriteLine("Usage:");
+        Console.WriteLine();
+        Console.WriteLine("Subcommand usage (preferred):");
+        Console.WriteLine("  cache update   --instrument SYM --start ISO --end ISO [--mode ticks|direct]");
+        Console.WriteLine("                 Fill or extend the .bi5 cache. No exports written.");
+        Console.WriteLine("  cache audit    [--instrument SYM]");
+        Console.WriteLine("                 Inspect the cache: file counts, coverage, disk usage.");
+        Console.WriteLine("  export bars    --instrument SYM --start ISO --end ISO --timeframe TF [--format csv|csv+hst]");
+        Console.WriteLine("                 Read cache (offline), write MT5 bar CSV/HST.");
+        Console.WriteLine("  export ticks   --instrument SYM --start ISO --end ISO");
+        Console.WriteLine("                 Read cache (offline), write per-month tick CSVs (MT5 import format).");
+        Console.WriteLine();
+        Console.WriteLine("Legacy flat-flag invocation (still supported):");
         Console.WriteLine("  --instrument EURUSD");
         Console.WriteLine("  --symbols EURUSD,XAUUSD|all");
         Console.WriteLine("  --digits 5");
