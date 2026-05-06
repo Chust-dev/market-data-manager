@@ -72,7 +72,7 @@ public static class Program
             return 1;
         }
 
-        var requestedInstruments = ResolveRequestedInstruments(options, instrumentConfig).ToList();
+        var requestedInstruments = ResolveRequestedInstruments(options.Instrument, options.Instruments, instrumentConfig).ToList();
         if (requestedInstruments.Count == 0)
         {
             Console.WriteLine("No instruments selected.");
@@ -139,7 +139,7 @@ public static class Program
                 var digits = await ResolveDigitsAsync(
                     client,
                     instrument,
-                    options,
+                    options.Digits,
                     instrumentConfig,
                     digitsMapOverrides,
                     startUtc,
@@ -303,14 +303,14 @@ public static class Program
                && Math.Abs(left.Close - right.Close) <= tolerance;
     }
 
-    private static IEnumerable<string> ResolveRequestedInstruments(AppOptions options, InstrumentConfig instrumentConfig)
+    internal static IEnumerable<string> ResolveRequestedInstruments(string? instrument, string? instruments, InstrumentConfig instrumentConfig)
     {
-        var value = options.Instruments?.Trim();
+        var value = instruments?.Trim();
         if (string.IsNullOrWhiteSpace(value))
         {
-            if (!string.IsNullOrWhiteSpace(options.Instrument))
+            if (!string.IsNullOrWhiteSpace(instrument))
             {
-                yield return options.Instrument.Trim().ToUpperInvariant();
+                yield return instrument.Trim().ToUpperInvariant();
             }
 
             yield break;
@@ -337,10 +337,10 @@ public static class Program
         }
     }
 
-    private static async Task<int> ResolveDigitsAsync(
+    internal static async Task<int> ResolveDigitsAsync(
         DukascopyClient client,
         string instrument,
-        AppOptions options,
+        int digitsOverride,
         InstrumentConfig instrumentConfig,
         IReadOnlyDictionary<string, int> digitsMapOverrides,
         DateTimeOffset startUtc,
@@ -353,10 +353,10 @@ public static class Program
             return mappedDigits;
         }
 
-        if (options.Digits > 0)
+        if (digitsOverride > 0)
         {
-            Console.WriteLine($"Digits for {instrument}: {options.Digits} (source: --digits)");
-            return options.Digits;
+            Console.WriteLine($"Digits for {instrument}: {digitsOverride} (source: --digits)");
+            return digitsOverride;
         }
 
         if (instrumentConfig.TryGetDigits(instrument, out var configDigits))
@@ -376,7 +376,7 @@ public static class Program
         return 5;
     }
 
-    private static IReadOnlyDictionary<string, int> ParseDigitsMap(string value)
+    internal static IReadOnlyDictionary<string, int> ParseDigitsMap(string value)
     {
         var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(value))
