@@ -39,6 +39,21 @@ public static class Program
             return RunAudit(options, instrumentExplicit: argMap.ContainsKey("instrument"));
         }
 
+        return await RunDownloadFlow(options);
+    }
+
+    /// <summary>
+    /// The main download/aggregate/export pipeline. Originally inlined inside
+    /// <see cref="Main"/>; extracted in Layer 1 of the refactor so that
+    /// subcommand classes (CacheUpdate, ExportBars, ExportTicks) can invoke it
+    /// with their own preconfigured <see cref="AppOptions"/>.
+    ///
+    /// Behaviour unchanged from the inlined version: interactive prompts (if
+    /// not <c>NonInteractive</c>), timeframe parse, instrument resolution,
+    /// per-instrument download/aggregate/write loop, and a final batch summary.
+    /// </summary>
+    internal static async Task<int> RunDownloadFlow(AppOptions options)
+    {
         var httpConfig = HttpConfig.Load(options.HttpConfigPath);
         var instrumentConfig = InstrumentConfig.Load(options.InstrumentsPath);
 
