@@ -1,3 +1,4 @@
+using HistoricalData.Commands.Options;
 using HistoricalData.Utils;
 
 namespace HistoricalData.Commands;
@@ -8,30 +9,48 @@ namespace HistoricalData.Commands;
 ///
 /// This is the cache-projection counterpart to `cache update`: the cache must
 /// already be filled, this command only reads from it. Missing hours are
-/// treated as data gaps and silently skipped (matching the cache-only mode
-/// behaviour added in earlier commits).
-///
-/// Args (all optional):
-///   --instrument SYMBOL or --symbols SYMBOL1,SYMBOL2,...|all
-///   --start ISO8601    --end ISO8601
-///   --timeframe m1|m5|m15|m30|h1|h4|h6|d1|w1|mn1|m&lt;minutes&gt;
-///   --format csv|csv+hst   (default csv+hst)
-///   --offset +HH:MM
-///   --pool PATH    --output PATH
-///   --no-prompt
-///   --quiet
+/// treated as data gaps and silently skipped.
 /// </summary>
 public sealed class ExportBarsCommand : ICommand
 {
     public Task<int> RunAsync(string[] args)
     {
         var argMap = ArgParser.Parse(args);
-        var options = AppOptions.FromArgs(argMap);
+        var options = BarExportOptions.FromArgs(argMap);
+        return Program.RunDownloadFlow(ToAppOptions(options));
+    }
 
-        // Export-bars invariants: cache-only (no network), no tick CSV side-effect.
-        // Force these regardless of what the user passed.
-        options = options with
+    /// <summary>
+    /// Bridge to the legacy engine: project BarExportOptions onto AppOptions
+    /// and apply the export-bars invariants (cache-only, no validation/repair,
+    /// no tick CSV side-effect, ticks-to-M1 download mode for the aggregator).
+    /// Layer 3 will replace this with a direct call to a bar-export entry
+    /// point that takes BarExportOptions and a cache reference.
+    /// </summary>
+    internal static AppOptions ToAppOptions(BarExportOptions options)
+    {
+        return AppOptions.Defaults with
         {
+            Instrument = options.Instrument,
+            Instruments = options.Instruments,
+            Start = options.Start,
+            End = options.End,
+            Timeframe = options.Timeframe,
+            OutputFormat = options.OutputFormat,
+            UtcOffset = options.UtcOffset,
+            DataPoolPath = options.PoolPath,
+            OutputPath = options.OutputPath,
+            HttpConfigPath = options.HttpConfigPath,
+            InstrumentsPath = options.InstrumentsConfigPath,
+            DeduplicateTicks = options.DeduplicateTicks,
+            SkipFallbackIfTicked = options.SkipFallbackIfTicked,
+            UseSessionCalendar = options.UseSessionCalendar,
+            SessionConfigPath = options.SessionConfigPath,
+            Digits = options.Digits,
+            DigitsMap = options.DigitsMap,
+            NonInteractive = options.NonInteractive,
+            Verbose = options.Verbose,
+            // Export-bars invariants — cache-only, no side-effects.
             DownloadMode = DownloadMode.TickToM1,
             RefreshCache = false,
             RecentRefreshDays = 0,
@@ -40,15 +59,5 @@ public sealed class ExportBarsCommand : ICommand
             ValidateM1 = false,
             ExportTicks = false
         };
-
-        // If the user didn't pass --format, default to csv+hst (full bar export).
-        // If they did pass --format none, that's a no-op run — preserved for now;
-        // Layer 2 may add validation.
-        if (!argMap.ContainsKey("format"))
-        {
-            options = options with { OutputFormat = OutputFormat.CsvHst };
-        }
-
-        return Program.RunDownloadFlow(options);
     }
 }
