@@ -20,16 +20,23 @@ scripts.
 
 ```text
 HistoricalData cache update   --instrument EURUSD --start ... --end ...
+HistoricalData cache catchup  [--instrument EURUSD | --symbols all] [--window 60]
+HistoricalData cache discover [--instrument EURUSD | --symbols all] [--since 2000-01-01]
 HistoricalData cache audit    [--instrument EURUSD]
 HistoricalData export bars    --instrument EURUSD --start ... --end ... --timeframe m1
 HistoricalData export ticks   --instrument EURUSD --start ... --end ...
 ```
 
 `cache update` fills or refreshes the `.bi5` pool (network calls). `cache
-audit` reports on the pool's shape (no network). `export bars` and
-`export ticks` are offline operations that read from the pool and produce
-MT5-compatible files; they never reach Dukascopy. Run `--help` for the full
-subcommand reference.
+catchup` is a thin wrapper around `cache update` that refreshes the
+rolling last-N days (default 60) — designed for weekly / scheduled
+maintenance. `cache discover` binary-searches Dukascopy to find the
+earliest available date per symbol and records it in
+`instruments.json` so other commands can use it as a sensible lower
+bound. `cache audit` reports on the pool's shape (no network).
+`export bars` and `export ticks` are offline operations that read
+from the pool and produce MT5-compatible files; they never reach
+Dukascopy. Run `--help` for the full subcommand reference.
 
 ## Architecture
 
@@ -199,7 +206,12 @@ Run without arguments to be prompted for:
 --export-ticks
 --audit
 --no-prompt
---quiet
+--verbose                   (subcommand mode; opt-in per-URL trace)
+--quiet                     (silences progress bar, banners, URL trace, summaries)
+--window 60                 (cache catchup: rolling refresh window in days)
+--since 2000-01-01          (cache discover: lower bound for binary search)
+--parallel 4                (cache discover: per-symbol concurrency)
+--refresh                   (cache discover: re-probe symbols already in instruments.json)
 --help
 ```
 
@@ -223,7 +235,13 @@ dotnet run --project c:\sampleApp\HistoricalData\src\ConsoleApp\HistoricalData.c
 
 ### Instruments
 
-[src/ConsoleApp/Config/instruments.json](src/ConsoleApp/Config/instruments.json) maps symbol to digits.
+[src/ConsoleApp/Config/instruments.json](src/ConsoleApp/Config/instruments.json) holds per-symbol metadata:
+
+- `digits` — Dukascopy price scale per symbol (5 for typical FX, 3 for JPY pairs and XAUUSD). Used by exporters and bar aggregation.
+- `earliest` — first UTC hour Dukascopy has data for, populated by `cache discover`. `null` means the symbol was probed and isn't on Dukascopy.
+- `latest` — most recent UTC hour available on the source. Reserved for future use by the discoverer.
+
+`earliest` and `latest` are optional and additive — files containing only `digits` continue to load without modification.
 
 ### HTTP
 
