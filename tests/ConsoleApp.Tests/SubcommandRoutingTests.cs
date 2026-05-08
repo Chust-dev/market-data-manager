@@ -14,6 +14,7 @@ public sealed class SubcommandRoutingTests
     [Theory]
     [InlineData("cache", "audit", typeof(CacheAuditCommand))]
     [InlineData("cache", "update", typeof(CacheUpdateCommand))]
+    [InlineData("cache", "catchup", typeof(CacheCatchupCommand))]
     [InlineData("export", "bars", typeof(ExportBarsCommand))]
     [InlineData("export", "ticks", typeof(ExportTicksCommand))]
     public void ResolveCommand_KnownVerbs_ReturnsMatchingCommand(string verb1, string verb2, Type expected)
@@ -63,9 +64,10 @@ public sealed class SubcommandRoutingTests
     [Fact]
     public void AllCommands_ImplementICommand()
     {
-        // Sanity: the four subcommand classes really do implement ICommand.
+        // Sanity: the subcommand classes really do implement ICommand.
         Assert.IsAssignableFrom<ICommand>(new CacheAuditCommand());
         Assert.IsAssignableFrom<ICommand>(new CacheUpdateCommand());
+        Assert.IsAssignableFrom<ICommand>(new CacheCatchupCommand());
         Assert.IsAssignableFrom<ICommand>(new ExportBarsCommand());
         Assert.IsAssignableFrom<ICommand>(new ExportTicksCommand());
     }

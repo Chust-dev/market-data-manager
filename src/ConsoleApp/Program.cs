@@ -244,6 +244,7 @@ public static class Program
         {
             ("cache", "audit") => new CacheAuditCommand(),
             ("cache", "update") => new CacheUpdateCommand(),
+            ("cache", "catchup") => new CacheCatchupCommand(),
             ("export", "bars") => new ExportBarsCommand(),
             ("export", "ticks") => new ExportTicksCommand(),
             _ => null
@@ -266,6 +267,8 @@ public static class Program
         Console.WriteLine("Subcommand usage (preferred):");
         Console.WriteLine("  cache update   --instrument SYM --start ISO --end ISO [--mode ticks|direct]");
         Console.WriteLine("                 Fill or extend the .bi5 cache. No exports written.");
+        Console.WriteLine("  cache catchup  [--instrument SYM | --symbols all] [--window 60]");
+        Console.WriteLine("                 Refresh the rolling N-day window (default 60 days). For weekly maintenance.");
         Console.WriteLine("  cache audit    [--instrument SYM]");
         Console.WriteLine("                 Inspect the cache: file counts, coverage, disk usage.");
         Console.WriteLine("  export bars    --instrument SYM --start ISO --end ISO --timeframe TF [--format csv|csv+hst]");

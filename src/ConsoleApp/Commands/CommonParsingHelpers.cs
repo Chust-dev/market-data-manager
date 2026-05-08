@@ -157,6 +157,25 @@ internal static class CommonParsingHelpers
         return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : D.RecentRefreshDays;
     }
 
+    /// <summary>
+    /// Catchup window in days, used by `cache catchup`. Default 60 ("the last
+    /// two months"). Negative or unparseable values fall back to default.
+    /// </summary>
+    public static int ParseWindow(IReadOnlyDictionary<string, string> args)
+    {
+        const int DefaultWindow = 60;
+        var value = args.GetValueOrDefault("window");
+        if (value is null)
+        {
+            return DefaultWindow;
+        }
+        if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) || parsed <= 0)
+        {
+            return DefaultWindow;
+        }
+        return parsed;
+    }
+
     public static int ParseValidationTolerancePoints(IReadOnlyDictionary<string, string> args)
     {
         var value = args.GetValueOrDefault("validation-tolerance-points");
