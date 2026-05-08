@@ -44,6 +44,14 @@ internal sealed class Downloader
         var poolPath = PathUtils.NormalizePath(options.PoolPath);
         Directory.CreateDirectory(poolPath);
 
+        // 3b. Crash-recovery hygiene: any .tmp files older than 1 hour are leftovers
+        //     from previous interrupted downloads (Ctrl+C, crash, system reboot
+        //     mid-write). They're never recovered or used; just delete them so they
+        //     don't accumulate. Scoped to ONLY the symbols being processed in this
+        //     run — never touches symbols outside the request, which keeps multiple
+        //     concurrent runs safe and the action's blast radius predictable.
+        CleanupStaleTmpFiles(poolPath, requestedInstruments, options.Verbose);
+
         // 4. Client (this pillar's the one that actually uses the network)
         var client = new DukascopyClient(httpConfig, poolPath, options.Verbose);
 
@@ -213,5 +221,71 @@ internal sealed class Downloader
         }
 
         summary.Print();
+    }
+
+    /// <summary>
+    /// Walk the symbol subfolders for the instruments being processed and delete
+    /// any .tmp files older than 1 hour. These are orphans left when a previous
+    /// download was interrupted between the file stream-write and the atomic
+    /// .tmp → .bi5 rename. They're never recovered or used and would otherwise
+    /// accumulate on disk over many crashes/Ctrl+C events.
+    ///
+    /// Scoped to the requested instruments only — never touches symbols outside
+    /// the run. Keeps multiple concurrent runs safe (run A on EURUSD doesn't
+    /// disturb run B's in-progress GBPUSD downloads) and the action's blast
+    /// radius is predictable from the command line.
+    ///
+    /// Best-effort: errors on individual files (locked, already deleted, etc.)
+    /// are swallowed. The 1-hour threshold is conservative — guarantees we don't
+    /// delete .tmp files belonging to a download still actively running in
+    /// another process for the same symbol.
+    /// </summary>
+    private static void CleanupStaleTmpFiles(string poolPath, IEnumerable<string> instruments, bool verbose)
+    {
+        if (!Directory.Exists(poolPath))
+        {
+            return;
+        }
+
+        var threshold = DateTimeOffset.UtcNow.AddHours(-1);
+        var deleted = 0;
+
+        foreach (var instrument in instruments)
+        {
+            var symbolPath = Path.Combine(poolPath, instrument);
+            if (!Directory.Exists(symbolPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                foreach (var tmpFile in Directory.EnumerateFiles(symbolPath, "*.tmp", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        var info = new FileInfo(tmpFile);
+                        if (info.Exists && info.LastWriteTimeUtc < threshold)
+                        {
+                            File.Delete(tmpFile);
+                            deleted++;
+                        }
+                    }
+                    catch
+                    {
+                        // Skip files that are locked or already gone.
+                    }
+                }
+            }
+            catch
+            {
+                // Skip if the enumeration of this symbol's folder fails.
+            }
+        }
+
+        if (deleted > 0 && verbose)
+        {
+            Console.WriteLine($"Cleaned up {deleted} stale .tmp file(s) from previous interrupted runs.");
+        }
     }
 }
