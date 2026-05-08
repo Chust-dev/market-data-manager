@@ -176,6 +176,49 @@ internal static class CommonParsingHelpers
         return parsed;
     }
 
+    /// <summary>
+    /// Lower bound for `cache discover`'s binary search, in UTC. Default
+    /// 2000-01-01 — earlier than any Dukascopy data we've ever seen
+    /// (FX majors typically start ~2003, crypto ~2017). Override with
+    /// `--since YYYY-MM-DD` to bound the search tighter when you know
+    /// the symbol is recent.
+    /// </summary>
+    public static DateTimeOffset ParseSince(IReadOnlyDictionary<string, string> args)
+    {
+        var defaultSince = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        return DateTimeParser.TryParse(args.GetValueOrDefault("since"), defaultSince);
+    }
+
+    /// <summary>
+    /// Per-symbol parallelism for `cache discover`. Default 4 — matches
+    /// Dukascopy's tolerated concurrency without spawning more requests
+    /// than a typical home connection can sustain. Negative or
+    /// unparseable values fall back to default.
+    /// </summary>
+    public static int ParseParallel(IReadOnlyDictionary<string, string> args)
+    {
+        const int DefaultParallel = 4;
+        var value = args.GetValueOrDefault("parallel");
+        if (value is null)
+        {
+            return DefaultParallel;
+        }
+        if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) || parsed <= 0)
+        {
+            return DefaultParallel;
+        }
+        return parsed;
+    }
+
+    /// <summary>
+    /// `--refresh` for `cache discover`. By default discover skips
+    /// symbols that already have an entry in the discovery section of
+    /// instruments.json (idempotent batch runs). With `--refresh`, every
+    /// requested symbol is re-probed — useful for new listings.
+    /// </summary>
+    public static bool ParseRefreshDiscovery(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("refresh");
+
     public static int ParseValidationTolerancePoints(IReadOnlyDictionary<string, string> args)
     {
         var value = args.GetValueOrDefault("validation-tolerance-points");

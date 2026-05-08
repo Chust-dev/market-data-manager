@@ -91,6 +91,44 @@ public sealed class DukascopyClient
             : new SymbolProbeResult(SymbolProbeStatus.NotFound, null);
     }
 
+    /// <summary>
+    /// Probe a single hour on Dukascopy to see if its tick file exists.
+    /// Walks the same month-candidates × base-URLs grid as the downloader,
+    /// so a 200 from any combination counts as Available. Doesn't write
+    /// anything to the local cache.
+    ///
+    /// Used by <see cref="HistoricalData.Audit.CacheDiscoverer"/> to
+    /// binary-search for the earliest day a symbol has data on the source.
+    /// </summary>
+    public async Task<HourProbeResult> ProbeHourAvailableAsync(
+        string instrument,
+        DateTimeOffset hourUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var fileName = $"{hourUtc:HH}h_{TickFileSuffix}.bi5";
+        var hasTransientError = false;
+
+        foreach (var month in GetMonthCandidates(hourUtc.Month))
+        {
+            var relativePath = $"{instrument}/{hourUtc:yyyy}/{month:00}/{hourUtc:dd}/{fileName}";
+            foreach (var baseUrl in _config.BaseUrls)
+            {
+                var probe = await ProbeUrlAsync($"{baseUrl.TrimEnd('/')}/{relativePath}", cancellationToken);
+                if (probe.Found)
+                {
+                    return HourProbeResult.Available;
+                }
+
+                if (!probe.NotFound)
+                {
+                    hasTransientError = true;
+                }
+            }
+        }
+
+        return hasTransientError ? HourProbeResult.TransientError : HourProbeResult.NotFound;
+    }
+
     public async Task<int?> TryDetectDigitsAsync(
         string instrument,
         DateTimeOffset startUtc,
@@ -992,6 +1030,20 @@ public sealed class DukascopyClient
 }
 
 public enum SymbolProbeStatus
+{
+    Available,
+    NotFound,
+    TransientError
+}
+
+/// <summary>
+/// Outcome of a single-hour availability probe. <c>Available</c> means
+/// at least one of the (month-candidate × base-URL) combinations returned
+/// 200; <c>NotFound</c> means every combination returned 404;
+/// <c>TransientError</c> means at least one combination errored
+/// (timeout, 5xx, network) without any 200 — caller should retry or skip.
+/// </summary>
+public enum HourProbeResult
 {
     Available,
     NotFound,

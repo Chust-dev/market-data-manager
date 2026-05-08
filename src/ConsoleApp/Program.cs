@@ -245,6 +245,7 @@ public static class Program
             ("cache", "audit") => new CacheAuditCommand(),
             ("cache", "update") => new CacheUpdateCommand(),
             ("cache", "catchup") => new CacheCatchupCommand(),
+            ("cache", "discover") => new CacheDiscoverCommand(),
             ("export", "bars") => new ExportBarsCommand(),
             ("export", "ticks") => new ExportTicksCommand(),
             _ => null
@@ -269,6 +270,8 @@ public static class Program
         Console.WriteLine("                 Fill or extend the .bi5 cache. No exports written.");
         Console.WriteLine("  cache catchup  [--instrument SYM | --symbols all] [--window 60]");
         Console.WriteLine("                 Refresh the rolling N-day window (default 60 days). For weekly maintenance.");
+        Console.WriteLine("  cache discover [--instrument SYM | --symbols all] [--since 2000-01-01] [--parallel 4] [--refresh]");
+        Console.WriteLine("                 Find earliest available date per symbol on Dukascopy; record into instruments.json.");
         Console.WriteLine("  cache audit    [--instrument SYM]");
         Console.WriteLine("                 Inspect the cache: file counts, coverage, disk usage.");
         Console.WriteLine("  export bars    --instrument SYM --start ISO --end ISO --timeframe TF [--format csv|csv+hst]");
