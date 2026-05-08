@@ -150,6 +150,10 @@ internal sealed class Downloader
     /// gap-repair and m1-validation passes which are also cache-filling
     /// operations (they download daily M1 files; the comparison side-effect
     /// is moot for cache update).
+    ///
+    /// Each phase wraps its work in a <see cref="ProgressBar"/> for live
+    /// progress + ETA. The bar polls <c>summary.HoursProcessed</c> on a
+    /// 500ms timer; rendering is suppressed when verbose=false (--quiet).
     /// </summary>
     private static async Task UpdateInstrumentCacheAsync(
         DukascopyClient client,
@@ -163,6 +167,7 @@ internal sealed class Downloader
         Console.WriteLine();
         Console.WriteLine($"=== {instrument} ===");
 
+        var totalHours = TimeRangeUtils.EnumerateHours(startUtc, endUtc).Count();
         var summary = new SummaryReport();
 
         // Throwaway aggregator — discarded after the call returns.
@@ -172,20 +177,27 @@ internal sealed class Downloader
             startUtc, endUtc, deduplicateTicks: true, skipFallbackIfTicked: true,
             sessionCalendar: null);
 
-        if (options.DownloadMode == DownloadMode.TickToM1)
+        // Main download phase
+        using (var progress = new ProgressBar(
+            instrument, totalHours,
+            currentSupplier: () => summary.HoursProcessed,
+            quiet: !options.Verbose))
         {
-            await client.DownloadTicksAndAggregate(
-                instrument, startUtc, endUtc, digits,
-                fallbackToM1: true,
-                options.RefreshCache, options.VerifyChecksum, options.RecentRefreshDays,
-                aggregator, summary, cancellationToken);
-        }
-        else
-        {
-            await client.DownloadM1Bars(
-                instrument, startUtc, endUtc, digits,
-                options.RefreshCache, options.VerifyChecksum, options.RecentRefreshDays,
-                aggregator, summary, cancellationToken);
+            if (options.DownloadMode == DownloadMode.TickToM1)
+            {
+                await client.DownloadTicksAndAggregate(
+                    instrument, startUtc, endUtc, digits,
+                    fallbackToM1: true,
+                    options.RefreshCache, options.VerifyChecksum, options.RecentRefreshDays,
+                    aggregator, summary, cancellationToken);
+            }
+            else
+            {
+                await client.DownloadM1Bars(
+                    instrument, startUtc, endUtc, digits,
+                    options.RefreshCache, options.VerifyChecksum, options.RecentRefreshDays,
+                    aggregator, summary, cancellationToken);
+            }
         }
 
         // Gap-repair pass — downloads daily M1 files for the date range.
@@ -198,6 +210,12 @@ internal sealed class Downloader
                 startUtc, endUtc, deduplicateTicks: false, skipFallbackIfTicked: true,
                 sessionCalendar: null);
             var repairSummary = new SummaryReport();
+
+            using var progress = new ProgressBar(
+                $"{instrument} (gap repair)", totalHours,
+                currentSupplier: () => repairSummary.HoursProcessed,
+                quiet: !options.Verbose);
+
             await client.DownloadM1Bars(
                 instrument, startUtc, endUtc, digits,
                 options.RefreshCache, options.VerifyChecksum, options.RecentRefreshDays,
@@ -214,6 +232,12 @@ internal sealed class Downloader
                 startUtc, endUtc, deduplicateTicks: false, skipFallbackIfTicked: false,
                 sessionCalendar: null);
             var validateSummary = new SummaryReport();
+
+            using var progress = new ProgressBar(
+                $"{instrument} (validating m1)", totalHours,
+                currentSupplier: () => validateSummary.HoursProcessed,
+                quiet: !options.Verbose);
+
             await client.DownloadM1Bars(
                 instrument, startUtc, endUtc, digits,
                 options.RefreshCache, options.VerifyChecksum, options.RecentRefreshDays,
