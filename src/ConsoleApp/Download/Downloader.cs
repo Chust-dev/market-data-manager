@@ -68,6 +68,7 @@ internal sealed class Downloader
         // 7. Per-instrument loop
         var succeeded = 0;
         var failed = 0;
+        var cancelled = 0;
         var digitsMapOverrides = Program.ParseDigitsMap(options.DigitsMap);
 
         foreach (var instrument in requestedInstruments)
@@ -101,11 +102,17 @@ internal sealed class Downloader
                     options, startUtc, endUtc, cts.Token);
                 succeeded++;
             }
-            catch (OperationCanceledException)
+            // Real user cancellation (Ctrl+C) — cts.Token was triggered.
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
                 Console.WriteLine($"Canceled while processing {instrument}.");
+                cancelled++;
                 break;
             }
+            // Any other exception (including HttpClient TaskCanceledException
+            // = request timeout, which inherits from OperationCanceledException
+            // but isn't triggered by cts) is a per-instrument failure. Loop
+            // continues to the next symbol.
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed instrument {instrument}: {ex.Message}");
@@ -119,8 +126,14 @@ internal sealed class Downloader
         Console.WriteLine($"  Requested: {requestedInstruments.Count}");
         Console.WriteLine($"  Succeeded: {succeeded}");
         Console.WriteLine($"  Failed:    {failed}");
+        if (cancelled > 0)
+        {
+            Console.WriteLine($"  Cancelled: {cancelled}");
+            Console.WriteLine();
+            Console.WriteLine("Run cancelled — partial cache committed. Re-run to resume.");
+        }
 
-        return failed == 0 ? 0 : 1;
+        return failed == 0 && cancelled == 0 ? 0 : 1;
     }
 
     /// <summary>

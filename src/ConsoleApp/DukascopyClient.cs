@@ -614,7 +614,16 @@ public sealed class DukascopyClient
             TryWriteMeta(localPath);
             return DownloadResult.CreateSuccess();
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // Real user cancellation (Ctrl+C) — propagate so the per-instrument loop can stop the run.
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        // Everything else, including HttpClient TaskCanceledException for request-timeout —
+        // treated as a transient failure. The retry loop in DownloadToPoolAsync handles it
+        // (retries, eventually NotFound or persistent error). The hour ends up counted as
+        // missing rather than aborting the entire instrument run.
+        catch (Exception ex)
         {
             return DownloadResult.Failure(ex.Message);
         }
@@ -643,7 +652,14 @@ public sealed class DukascopyClient
 
             return ProbeResult.Failure($"HTTP {(int)response.StatusCode}");
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // Real user cancellation (Ctrl+C) — propagate.
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        // Everything else, including HttpClient request timeouts — treated as a probe failure
+        // for this URL/baseUrl combination. The probe retry / fallback baseUrls handle it.
+        catch (Exception ex)
         {
             return ProbeResult.Failure(ex.Message);
         }

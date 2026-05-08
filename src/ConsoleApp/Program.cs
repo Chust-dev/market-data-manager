@@ -112,6 +112,7 @@ public static class Program
 
         var succeeded = 0;
         var failed = 0;
+        var cancelled = 0;
         var digitsMapOverrides = ParseDigitsMap(options.DigitsMap);
         foreach (var instrument in requestedInstruments)
         {
@@ -167,11 +168,18 @@ public static class Program
                     failed++;
                 }
             }
-            catch (OperationCanceledException)
+            // Real user cancellation (Ctrl+C) — cts.Token was triggered.
+            // We stop the loop and surface a "cancelled" count in the summary.
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
                 Console.WriteLine($"Canceled while processing {instrument}.");
+                cancelled++;
                 break;
             }
+            // Any other exception, including HttpClient TaskCanceledException
+            // (request timeout — a subclass of OperationCanceledException but
+            // NOT triggered by cts), counts as a per-instrument failure and
+            // the loop continues with the next symbol.
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed instrument {instrument}: {ex.Message}");
@@ -184,8 +192,14 @@ public static class Program
         Console.WriteLine($"  Requested: {requestedInstruments.Count}");
         Console.WriteLine($"  Succeeded: {succeeded}");
         Console.WriteLine($"  Failed:    {failed}");
+        if (cancelled > 0)
+        {
+            Console.WriteLine($"  Cancelled: {cancelled}");
+            Console.WriteLine();
+            Console.WriteLine("Run cancelled — partial cache committed. Re-run to resume.");
+        }
 
-        return failed == 0 ? 0 : 1;
+        return failed == 0 && cancelled == 0 ? 0 : 1;
     }
 
     /// <summary>
