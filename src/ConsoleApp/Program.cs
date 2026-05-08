@@ -306,7 +306,8 @@ public static class Program
         Console.WriteLine("  --export-ticks                  Also write per-month tick CSVs (MT5 import format)");
         Console.WriteLine("  --audit                         Inspect the data pool and print a coverage summary; no download");
         Console.WriteLine("  --no-prompt");
-        Console.WriteLine("  --quiet");
+        Console.WriteLine("  --verbose                       Print every download URL (off by default; on, may interleave with the progress bar)");
+        Console.WriteLine("  --quiet                         Silent mode: no progress bar, no per-URL trace, no banners");
     }
 
     private static bool IsWithinTolerance(Bar left, Bar right, double tolerance)

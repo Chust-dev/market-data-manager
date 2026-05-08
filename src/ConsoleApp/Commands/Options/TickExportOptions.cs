@@ -21,7 +21,8 @@ internal sealed record TickExportOptions(
     int Digits,
     string DigitsMap,
     bool NonInteractive,
-    bool Verbose)
+    bool Verbose,
+    bool Quiet)
 {
     public static TickExportOptions FromArgs(IReadOnlyDictionary<string, string> args)
     {
@@ -39,6 +40,7 @@ internal sealed record TickExportOptions(
             Digits: CommonParsingHelpers.ParseDigits(args),
             DigitsMap: CommonParsingHelpers.ParseDigitsMap(args),
             NonInteractive: CommonParsingHelpers.ParseNonInteractive(args),
-            Verbose: CommonParsingHelpers.ParseVerbose(args));
+            Verbose: CommonParsingHelpers.ParseVerbose(args),
+            Quiet: CommonParsingHelpers.ParseQuiet(args));
     }
 }

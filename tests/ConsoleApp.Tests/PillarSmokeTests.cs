@@ -69,7 +69,8 @@ public sealed class PillarSmokeTests : IDisposable
             Digits: 5,
             DigitsMap: "",
             NonInteractive: true,
-            Verbose: false);
+            Verbose: false,
+            Quiet: true);
 
         var result = await new BarExporter().RunAsync(options);
 
@@ -100,7 +101,8 @@ public sealed class PillarSmokeTests : IDisposable
             Digits: 5,
             DigitsMap: "",
             NonInteractive: true,
-            Verbose: false);
+            Verbose: false,
+            Quiet: true);
 
         var result = await new BarExporter().RunAsync(options);
 
@@ -125,7 +127,8 @@ public sealed class PillarSmokeTests : IDisposable
             Digits: 5,
             DigitsMap: "",
             NonInteractive: true,
-            Verbose: false);
+            Verbose: false,
+            Quiet: true);
 
         var result = await new TickExporter().RunAsync(options);
 
@@ -157,7 +160,8 @@ public sealed class PillarSmokeTests : IDisposable
             Digits: 5,
             DigitsMap: "",
             NonInteractive: true,
-            Verbose: false);
+            Verbose: false,
+            Quiet: true);
 
         var result = await new BarExporter().RunAsync(options);
 
@@ -180,7 +184,8 @@ public sealed class PillarSmokeTests : IDisposable
             Digits: 5,
             DigitsMap: "",
             NonInteractive: true,
-            Verbose: false);
+            Verbose: false,
+            Quiet: true);
 
         var result = await new TickExporter().RunAsync(options);
 

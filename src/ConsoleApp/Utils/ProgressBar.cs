@@ -29,6 +29,16 @@ public sealed class ProgressBar : IDisposable
     private const int BarWidth = 20;
     private const int PollIntervalMs = 500;
 
+    /// <summary>
+    /// ANSI escape sequence "ESC [K" — clears from the cursor position to the
+    /// end of the line. We append this to every TTY render so trailing chars
+    /// from a previously longer line (URL trace output, longer ETA strings,
+    /// "calculating..." vs "0s") get fully wiped instead of leaving residue.
+    /// Supported by Windows Terminal, VS Code's integrated terminal,
+    /// PowerShell 7+, and all modern Linux/macOS terminals.
+    /// </summary>
+    private const string ClearToEol = "[K";
+
     private readonly string _label;
     private readonly long _total;
     private readonly Func<long> _currentSupplier;
@@ -121,8 +131,7 @@ public sealed class ProgressBar : IDisposable
             var bar = BuildBar(pct);
             var eta = ComputeEta(current, elapsed);
             var line = $"{_label}  {bar}  {pct:P1}  {current:N0}/{_total:N0}  ETA {eta}";
-            // Trailing spaces clear any leftover characters from a previously longer line.
-            Console.Write($"\r{line}    ");
+            Console.Write($"\r{line}{ClearToEol}");
         }
     }
 

@@ -104,8 +104,21 @@ internal static class CommonParsingHelpers
     public static bool ParseNonInteractive(IReadOnlyDictionary<string, string> args) =>
         args.ContainsKey("no-prompt");
 
+    /// <summary>
+    /// Verbose mode is OPT-IN — pass --verbose to enable the per-URL "Downloading X"
+    /// trace output. Default is false: progress bars handle the user-visible feedback
+    /// without URL spam interleaving them.
+    /// </summary>
     public static bool ParseVerbose(IReadOnlyDictionary<string, string> args) =>
-        !args.ContainsKey("quiet");
+        args.ContainsKey("verbose");
+
+    /// <summary>
+    /// Quiet mode silences all output (progress bars, banners, URL spam, summaries).
+    /// Independent from --verbose: --quiet wins if both are present.
+    /// Useful for scheduled tasks that just want exit codes.
+    /// </summary>
+    public static bool ParseQuiet(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("quiet");
 
     public static bool ParseRefreshCache(IReadOnlyDictionary<string, string> args) =>
         !args.ContainsKey("no-refresh");

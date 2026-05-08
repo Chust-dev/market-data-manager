@@ -181,7 +181,7 @@ internal sealed class Downloader
         using (var progress = new ProgressBar(
             instrument, totalHours,
             currentSupplier: () => summary.HoursProcessed,
-            quiet: !options.Verbose))
+            quiet: options.Quiet))
         {
             if (options.DownloadMode == DownloadMode.TickToM1)
             {
@@ -214,7 +214,7 @@ internal sealed class Downloader
             using var progress = new ProgressBar(
                 $"{instrument} (gap repair)", totalHours,
                 currentSupplier: () => repairSummary.HoursProcessed,
-                quiet: !options.Verbose);
+                quiet: options.Quiet);
 
             await client.DownloadM1Bars(
                 instrument, startUtc, endUtc, digits,
@@ -236,7 +236,7 @@ internal sealed class Downloader
             using var progress = new ProgressBar(
                 $"{instrument} (validating m1)", totalHours,
                 currentSupplier: () => validateSummary.HoursProcessed,
-                quiet: !options.Verbose);
+                quiet: options.Quiet);
 
             await client.DownloadM1Bars(
                 instrument, startUtc, endUtc, digits,

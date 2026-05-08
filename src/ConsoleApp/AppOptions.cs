@@ -49,7 +49,8 @@ public sealed record AppOptions(
     string SessionConfigPath,
     bool NonInteractive,
     bool ExportTicks,
-    bool Audit
+    bool Audit,
+    bool Quiet
 )
 {
     public static AppOptions Defaults => new(
@@ -82,7 +83,8 @@ public sealed record AppOptions(
         SessionConfigPath: "./src/ConsoleApp/Config/sessions.json",
         NonInteractive: false,
         ExportTicks: false,
-        Audit: false
+        Audit: false,
+        Quiet: false
     );
 
     public static AppOptions FromArgs(Dictionary<string, string> args)
@@ -119,7 +121,11 @@ public sealed record AppOptions(
         };
 
         var offset = TimeSpanParser.TryParse(args.GetValueOrDefault("offset"), d.UtcOffset);
-        var verbose = !args.ContainsKey("quiet");
+        // Verbose is opt-in (--verbose); default is quieter so progress bars
+        // can render without URL spam interleaving them.
+        var verbose = args.ContainsKey("verbose");
+        // Quiet is the kill switch — silences progress bars too, not just URLs.
+        var quiet = args.ContainsKey("quiet");
         var nonInteractive = args.ContainsKey("no-prompt");
         var sessionConfigPath = args.GetValueOrDefault("session-config", d.SessionConfigPath);
 
@@ -169,7 +175,8 @@ public sealed record AppOptions(
             SessionConfigPath = sessionConfigPath,
             NonInteractive = nonInteractive,
             ExportTicks = exportTicks,
-            Audit = audit
+            Audit = audit,
+            Quiet = quiet
         };
     }
 
