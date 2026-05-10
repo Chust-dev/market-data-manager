@@ -4,18 +4,23 @@ using HistoricalData.Utils;
 namespace HistoricalData.Commands;
 
 /// <summary>
-/// `cache verify` — offline checksum verification of cached .bi5 files.
-/// Walks the pool, recomputes SHA-256 on every file, compares against the
-/// sidecar .meta.json. Reports OK / no-metadata / size-mismatch /
-/// hash-mismatch / I/O-error counts per symbol. No network calls.
+/// `cache verify` — offline checksum verification of cached .bi5 files
+/// against their sidecar metadata. With <c>--remote</c>, additionally
+/// probes Dukascopy to detect drift between the cache and the source.
 ///
-/// Exit code: 0 if every cached file verifies clean, 1 otherwise (so
-/// scheduled tasks can detect drift). Honours `--quiet` to silence the
-/// progress bar; `Ctrl+C` cancels mid-run.
+/// Local check (default): walks the pool, recomputes SHA-256 on every
+/// file, compares against the sidecar <c>.meta.json</c>. Reports
+/// Ok / NoMetadata / SizeMismatch / HashMismatch / IoError.
 ///
-/// Filters: `--instrument SYMBOL` to focus on one pair, or
-/// `--symbols SYMBOL1,SYMBOL2,...` for a subset. With no filter, every
-/// symbol cached under the pool is verified.
+/// Remote check (<c>--remote</c>): for each locally-clean file, fetches
+/// from Dukascopy and compares. <b>Default is byte-exact</b> (downloads
+/// each file body, computes SHA-256 on the fly). Pass <c>--size-only</c>
+/// to fall back to Content-Length compare without body download — faster
+/// but won't catch same-length content changes.
+///
+/// Exit code: 0 if every cached file passes both local and (if performed)
+/// remote checks, 1 otherwise. Honours <c>--instrument</c> / <c>--symbols</c>
+/// filters and <c>--quiet</c>; Ctrl+C cancels mid-run.
 /// </summary>
 public sealed class CacheVerifyCommand : ICommand
 {
@@ -23,6 +28,6 @@ public sealed class CacheVerifyCommand : ICommand
     {
         var argMap = ArgParser.Parse(args);
         var options = CacheVerifyOptions.FromArgs(argMap);
-        return Task.FromResult(Program.RunVerify(options));
+        return Program.RunVerifyAsync(options);
     }
 }

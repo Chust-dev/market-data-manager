@@ -23,7 +23,7 @@ HistoricalData cache update   --instrument EURUSD --start ... --end ...
 HistoricalData cache catchup  [--instrument EURUSD | --symbols all] [--window 60]
 HistoricalData cache discover [--instrument EURUSD | --symbols all] [--since 2000-01-01]
 HistoricalData cache audit    [--instrument EURUSD]
-HistoricalData cache verify   [--instrument EURUSD] [--quiet]
+HistoricalData cache verify   [--instrument EURUSD] [--remote [--size-only]] [--quiet]
 HistoricalData cache repair   [--instrument EURUSD] [--dry-run] [--trust-existing] [--quiet]
 HistoricalData cache cleanup  [--instrument EURUSD] [--dry-run] [--quiet]
 HistoricalData export bars    --instrument EURUSD --start ... --end ... --timeframe m1
@@ -38,7 +38,8 @@ earliest available date per symbol and records it in
 `instruments.json` so other commands can use it as a sensible lower
 bound. `cache audit` reports on the pool's shape (no network).
 `cache verify` recomputes SHA-256 on every cached file and flags drift
-versus the sidecar metadata written at download time (no network).
+versus the sidecar metadata written at download time (no network);
+add `--remote` to additionally probe Dukascopy and detect source-side drift.
 `cache repair` consumes verify's output and surgically re-downloads
 problem files (or regenerates missing sidecars). `cache cleanup` is the
 destructive last resort — removes zero-byte downloads, orphan sidecars,
@@ -358,6 +359,51 @@ exit code: 0 = clean, 1 = problems found or run cancelled).
 Verification rehashes every file, so it's CPU-bound and slow on full
 pools — expect a few minutes per GB on typical hardware. Press `Ctrl+C`
 to cancel mid-run; partial results are not saved.
+
+### Detecting source-side drift (`--remote`)
+
+The default local check answers "has my cache rotted on disk?". It cannot
+answer "does my cache still match Dukascopy's current bytes?" — Dukascopy
+occasionally amends recent ticks, and a pool migrated from another machine
+might carry sidecars that disagree with the live source.
+
+`cache verify --remote` adds a per-file probe to Dukascopy:
+
+```text
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- cache verify --remote --instrument EURUSD
+```
+
+For each file that passed the local check, the verifier fetches the same
+URL from Dukascopy and compares. **Default is byte-exact**: the body is
+streamed and SHA-256-hashed on the fly, then compared against the local
+sidecar's recorded hash. This catches all source-side drift, including
+content changes that preserve file size.
+
+For a faster, less thorough check, pass `--size-only`:
+
+```text
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- cache verify --remote --size-only
+```
+
+Size-only mode fetches just the response headers (`Content-Length`) and
+compares against the local file size. No body download. Catches the common
+amendment case (a `.bi5` file usually changes size when Dukascopy edits it,
+because LZMA compression is sensitive to content), but won't detect
+same-length content changes.
+
+| Mode | Cost | Catches |
+|---|---|---|
+| `--remote` (default = byte-exact) | re-downloads the pool, ~hours per GB | all drift |
+| `--remote --size-only` | one HEAD-equivalent per file, ~minutes per pool | most drift; misses same-size content changes |
+
+Files that fail the local check are **not** probed remotely — there's no
+point burning network on a file we already know is bad. Locally-bad files
+get `cache repair`'s attention instead.
+
+Remote drift is reported separately from local problems in the output.
+Files flagged as `RemoteSizeMismatch` or `RemoteHashMismatch` should be
+re-downloaded with `cache repair`. Files marked `RemoteUnreachable` (404
+or network failure) are usually transient — re-run later.
 
 ## Repairing the cache
 

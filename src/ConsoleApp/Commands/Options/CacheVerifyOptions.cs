@@ -2,22 +2,32 @@ namespace HistoricalData.Commands.Options;
 
 /// <summary>
 /// Typed options for `cache verify`. Walks the pool, recomputes SHA-256 on
-/// every cached .bi5 file, compares against the sidecar .meta.json. No
-/// network. Honours the same `--quiet` convention as the other Manage-pillar
-/// commands so scheduled jobs can run silent and just check the exit code.
+/// every cached .bi5 file, compares against the sidecar .meta.json (no
+/// network). With <see cref="Remote"/>, additionally probes Dukascopy for
+/// each locally-clean file to detect drift between the cache and the
+/// source — catches amended ticks, copy-from-elsewhere mismatches, and
+/// other silent source-side changes.
 ///
-/// `InstrumentFilter` is null when no filter was passed — meaning verify
-/// every symbol in the pool. Otherwise it's the explicit list from
-/// `--instrument` or `--symbols`.
+/// <see cref="SizeOnly"/> matters only when <see cref="Remote"/> is also
+/// set: it falls back to a Content-Length compare (no body download)
+/// instead of the default byte-exact hash. Faster, less safe.
+///
+/// <see cref="InstrumentFilter"/> is null when no filter was passed —
+/// meaning verify every symbol in the pool. Otherwise it's the explicit
+/// list from <c>--instrument</c> or <c>--symbols</c>.
 /// </summary>
 internal sealed record CacheVerifyOptions(
     IReadOnlyCollection<string>? InstrumentFilter,
     string PoolPath,
+    bool Remote,
+    bool SizeOnly,
     bool Quiet)
 {
     public static CacheVerifyOptions FromArgs(IReadOnlyDictionary<string, string> args) =>
         new(
             InstrumentFilter: CommonParsingHelpers.ParseInstrumentFilter(args),
             PoolPath: CommonParsingHelpers.ParsePoolPath(args),
+            Remote: CommonParsingHelpers.ParseRemote(args),
+            SizeOnly: CommonParsingHelpers.ParseSizeOnly(args),
             Quiet: CommonParsingHelpers.ParseQuiet(args));
 }

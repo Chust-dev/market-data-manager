@@ -485,6 +485,122 @@ public sealed class DukascopyClient
         return false;
     }
 
+    /// <summary>
+    /// Source-side probe for `cache verify --remote`: fetches the file at a
+    /// known (instrument, year, dukaMonth, day, fileName) coordinate and
+    /// returns its Content-Length and (optionally) SHA-256, without ever
+    /// touching the local cache. Used to detect drift between cached files
+    /// and Dukascopy's current bytes (e.g. amended recent ticks).
+    ///
+    /// When <paramref name="fetchBody"/> is <c>false</c>, the request is
+    /// closed after headers are received — Content-Length only, no body
+    /// download. When <c>true</c>, the body is streamed through SHA-256 on
+    /// the fly so the resulting hash and length are returned together
+    /// without ever materialising the bytes on disk.
+    ///
+    /// Honours the configured retry count and base-URL fallback list.
+    /// Returns <see cref="RemoteProbeStatus.NotFound"/> if every base URL
+    /// reports 404, <see cref="RemoteProbeStatus.Unreachable"/> on repeated
+    /// non-404 failures.
+    /// </summary>
+    public async Task<Manage.RemoteProbeResult> ProbeFileAsync(
+        string instrument,
+        int year,
+        int dukaMonth,
+        int day,
+        string fileName,
+        bool fetchBody,
+        CancellationToken cancellationToken = default)
+    {
+        var relativePath = $"{instrument}/{year:0000}/{dukaMonth:00}/{day:00}/{fileName}";
+
+        for (var attempt = 1; attempt <= _config.RetryCount; attempt++)
+        {
+            var anyNotFound = true;
+            foreach (var baseUrl in _config.BaseUrls)
+            {
+                var url = $"{baseUrl.TrimEnd('/')}/{relativePath}";
+                var (status, length, hash) = await TryProbeAsync(url, fetchBody, cancellationToken);
+                if (status == Manage.RemoteProbeStatus.Ok)
+                {
+                    return new Manage.RemoteProbeResult(status, length, hash);
+                }
+                if (status != Manage.RemoteProbeStatus.NotFound)
+                {
+                    anyNotFound = false;
+                }
+            }
+
+            if (anyNotFound)
+            {
+                return new Manage.RemoteProbeResult(Manage.RemoteProbeStatus.NotFound, null, null);
+            }
+
+            if (attempt < _config.RetryCount)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(_config.RetryBackoffSeconds), cancellationToken);
+            }
+        }
+
+        return new Manage.RemoteProbeResult(Manage.RemoteProbeStatus.Unreachable, null, null);
+    }
+
+    private async Task<(Manage.RemoteProbeStatus Status, long? Length, string? Sha256)> TryProbeAsync(
+        string url,
+        bool fetchBody,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await _httpClient.GetAsync(
+                url,
+                fetchBody ? HttpCompletionOption.ResponseContentRead : HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return (Manage.RemoteProbeStatus.NotFound, null, null);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return (Manage.RemoteProbeStatus.Unreachable, null, null);
+            }
+
+            var length = response.Content.Headers.ContentLength;
+
+            if (!fetchBody)
+            {
+                return (Manage.RemoteProbeStatus.Ok, length, null);
+            }
+
+            // Stream the body through SHA-256 without materialising on disk.
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            var buffer = new byte[64 * 1024];
+            long total = 0;
+            int read;
+            while ((read = await stream.ReadAsync(buffer, cancellationToken)) > 0)
+            {
+                sha.TransformBlock(buffer, 0, read, null, 0);
+                total += read;
+            }
+            sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+            var hash = Convert.ToHexString(sha.Hash!);
+            // Prefer the actual streamed length over Content-Length if they disagree
+            // (some HTTP servers omit or misreport headers).
+            return (Manage.RemoteProbeStatus.Ok, total, hash);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return (Manage.RemoteProbeStatus.Unreachable, null, null);
+        }
+    }
+
     private async Task<IReadOnlyList<Bar>> DownloadM1BarsForDayData(
         string instrument,
         DateTimeOffset dayUtc,

@@ -265,14 +265,15 @@ public static class Program
     }
 
     /// <summary>
-    /// Drives the offline checksum verification flow for `cache verify`.
-    /// Two phases: <see cref="CacheVerifier.PlanFiles"/> enumerates targets
-    /// (so the progress bar can know the total upfront), then
-    /// <see cref="CacheVerifier.RunPlan"/> does the SHA-256 work while the
-    /// bar polls <see cref="CacheVerifier.FilesProcessed"/>. Returns 0 on a
-    /// clean pool, 1 if any problem is found or the run is cancelled.
+    /// Drives the verification flow for `cache verify`. Always runs the local
+    /// (sidecar-vs-bytes) check; with <see cref="CacheVerifyOptions.Remote"/>,
+    /// additionally probes Dukascopy per locally-clean file to detect drift
+    /// against the source. <see cref="CacheVerifyOptions.SizeOnly"/> chooses
+    /// the cheap Content-Length probe over the default byte-exact hash.
+    /// Returns 0 if both local and (if performed) remote checks are clean,
+    /// 1 if any problem is found or the run is cancelled.
     /// </summary>
-    internal static int RunVerify(CacheVerifyOptions options)
+    internal static async Task<int> RunVerifyAsync(CacheVerifyOptions options)
     {
         var poolPath = PathUtils.NormalizePath(options.PoolPath);
         var verifier = new CacheVerifier(poolPath);
@@ -299,14 +300,32 @@ public static class Program
 
         if (!options.Quiet)
         {
-            Console.WriteLine($"Verifying {plan.Count:N0} cached file(s) in {poolPath}...");
+            if (options.Remote)
+            {
+                var mode = options.SizeOnly ? "size-only" : "byte-exact";
+                Console.WriteLine($"Verifying {plan.Count:N0} cached file(s) in {poolPath} (local + remote drift, {mode})...");
+            }
+            else
+            {
+                Console.WriteLine($"Verifying {plan.Count:N0} cached file(s) in {poolPath}...");
+            }
         }
 
         CacheVerifyReport report;
         try
         {
             using var pb = new ProgressBar("Verify", plan.Count, () => verifier.FilesProcessed, options.Quiet);
-            report = verifier.RunPlan(plan, cts.Token);
+            if (options.Remote)
+            {
+                var httpConfig = HttpConfig.Load(AppOptions.Defaults.HttpConfigPath);
+                var client = new DukascopyClient(httpConfig, poolPath, verbose: false);
+                var probe = new HistoricalData.Download.DukascopyRemoteFileProbe(client);
+                report = await verifier.RunPlanWithRemoteAsync(plan, probe, byteExact: !options.SizeOnly, cts.Token);
+            }
+            else
+            {
+                report = verifier.RunPlan(plan, cts.Token);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -466,8 +485,8 @@ public static class Program
         Console.WriteLine("                 Find earliest available date per symbol on Dukascopy; record into instruments.json.");
         Console.WriteLine("  cache audit    [--instrument SYM]");
         Console.WriteLine("                 Inspect the cache: file counts, coverage, disk usage.");
-        Console.WriteLine("  cache verify   [--instrument SYM] [--quiet]");
-        Console.WriteLine("                 Recompute SHA-256 on cached .bi5 files; flag drift vs sidecar metadata.");
+        Console.WriteLine("  cache verify   [--instrument SYM] [--remote [--size-only]] [--quiet]");
+        Console.WriteLine("                 Recompute SHA-256 vs sidecar (local) and optionally probe Dukascopy for drift.");
         Console.WriteLine("  cache repair   [--instrument SYM] [--dry-run] [--trust-existing] [--quiet]");
         Console.WriteLine("                 Auto-fix files flagged by verify (refetch from Dukascopy or regenerate sidecar).");
         Console.WriteLine("  cache cleanup  [--instrument SYM] [--dry-run] [--quiet]");

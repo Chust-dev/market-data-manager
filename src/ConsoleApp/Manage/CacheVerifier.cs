@@ -105,12 +105,44 @@ public sealed class CacheVerifier
     }
 
     /// <summary>
-    /// Pass 2: verify each file in the plan. Resets and increments
-    /// <see cref="FilesProcessed"/> as it goes. Throws
-    /// <see cref="OperationCanceledException"/> on cancellation; partial work
-    /// is discarded (the caller decides how to surface that).
+    /// Pass 2 (local only): verify each file in the plan against its sidecar.
+    /// Resets and increments <see cref="FilesProcessed"/> as it goes. Throws
+    /// <see cref="OperationCanceledException"/> on cancellation.
     /// </summary>
     public CacheVerifyReport RunPlan(IReadOnlyList<VerifyTarget> plan, CancellationToken cancellationToken = default)
+    {
+        return RunPlanInternal(plan, remoteProbe: null, byteExact: false, cancellationToken)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    /// <summary>
+    /// Pass 2 (local + remote): same as <see cref="RunPlan"/> but additionally
+    /// probes Dukascopy for each locally-Ok file to detect drift between the
+    /// cache and the source. Files that fail the local check are NOT probed
+    /// remotely (they're already known-bad — no point burning network on
+    /// them). Each locally-Ok file gets a <see cref="RemoteVerifyOutcome"/>
+    /// recorded alongside its local outcome.
+    ///
+    /// <paramref name="byteExact"/> = true downloads the body and SHA-256s it
+    /// for byte-exact compare; false fetches only Content-Length for a fast
+    /// size-only check.
+    /// </summary>
+    public Task<CacheVerifyReport> RunPlanWithRemoteAsync(
+        IReadOnlyList<VerifyTarget> plan,
+        IRemoteFileProbe remoteProbe,
+        bool byteExact,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(remoteProbe);
+        return RunPlanInternal(plan, remoteProbe, byteExact, cancellationToken);
+    }
+
+    private async Task<CacheVerifyReport> RunPlanInternal(
+        IReadOnlyList<VerifyTarget> plan,
+        IRemoteFileProbe? remoteProbe,
+        bool byteExact,
+        CancellationToken cancellationToken)
     {
         Interlocked.Exchange(ref _filesProcessed, 0);
 
@@ -118,7 +150,9 @@ public sealed class CacheVerifier
         {
             PoolPath = _poolPath,
             PoolExists = Directory.Exists(_poolPath),
-            FilesPlanned = plan.Count
+            FilesPlanned = plan.Count,
+            RemoteCheckPerformed = remoteProbe is not null,
+            RemoteByteExact = remoteProbe is not null && byteExact
         };
 
         var bySymbol = new Dictionary<string, SymbolVerifyReport>(StringComparer.OrdinalIgnoreCase);
@@ -133,12 +167,25 @@ public sealed class CacheVerifier
                 bySymbol[target.Symbol] = symbolReport;
             }
 
-            var outcome = Inspect(target.Path);
-            symbolReport.Increment(outcome);
+            var localOutcome = Inspect(target.Path);
+            symbolReport.Increment(localOutcome);
 
-            if (outcome != VerifyOutcome.Ok && report.Mismatches.Count < CacheVerifyReport.MaxMismatchesShown)
+            if (localOutcome != VerifyOutcome.Ok && report.Mismatches.Count < CacheVerifyReport.MaxMismatchesShown)
             {
-                report.Mismatches.Add(new VerifyMismatch(target.Symbol, target.Path, outcome));
+                report.Mismatches.Add(new VerifyMismatch(target.Symbol, target.Path, localOutcome));
+            }
+
+            // Only run remote check on locally-clean files. Probing a known-bad
+            // file wastes network without telling us anything new.
+            if (remoteProbe is not null && localOutcome == VerifyOutcome.Ok)
+            {
+                var (remoteOutcome, localSize, remoteSize) = await CheckRemoteAsync(target, remoteProbe, byteExact, cancellationToken);
+                symbolReport.IncrementRemote(remoteOutcome);
+                if (remoteOutcome != RemoteVerifyOutcome.RemoteOk
+                    && report.RemoteMismatches.Count < CacheVerifyReport.MaxMismatchesShown)
+                {
+                    report.RemoteMismatches.Add(new RemoteVerifyMismatch(target.Symbol, target.Path, remoteOutcome, localSize, remoteSize));
+                }
             }
 
             Interlocked.Increment(ref _filesProcessed);
@@ -146,6 +193,57 @@ public sealed class CacheVerifier
 
         report.Symbols.AddRange(bySymbol.Values.OrderBy(s => s.Symbol, StringComparer.OrdinalIgnoreCase));
         return report;
+    }
+
+    private static async Task<(RemoteVerifyOutcome Outcome, long? LocalSize, long? RemoteSize)> CheckRemoteAsync(
+        VerifyTarget target,
+        IRemoteFileProbe probe,
+        bool byteExact,
+        CancellationToken cancellationToken)
+    {
+        if (!CacheRepairer.TryParseCacheFilePath(target.Path, out var symbol, out var year, out var month, out var day, out var fileName))
+        {
+            // Path unparseable — treat as unreachable so it surfaces in the report.
+            return (RemoteVerifyOutcome.RemoteUnreachable, null, null);
+        }
+
+        long? localSize = null;
+        try
+        {
+            localSize = new FileInfo(target.Path).Length;
+        }
+        catch
+        {
+            return (RemoteVerifyOutcome.RemoteUnreachable, null, null);
+        }
+
+        var result = await probe.ProbeAsync(symbol, year, month, day, fileName, byteExact, cancellationToken);
+
+        if (result.Status == RemoteProbeStatus.NotFound || result.Status == RemoteProbeStatus.Unreachable)
+        {
+            return (RemoteVerifyOutcome.RemoteUnreachable, localSize, null);
+        }
+
+        // Status == Ok
+        if (result.ContentLength is long remoteLen && remoteLen != localSize)
+        {
+            return (RemoteVerifyOutcome.RemoteSizeMismatch, localSize, remoteLen);
+        }
+
+        if (byteExact && result.Sha256 is { } remoteHash)
+        {
+            // Read the local file's hash from its sidecar — it was just verified
+            // matches local bytes, so this is equivalent to hashing the file again
+            // but cheaper.
+            if (DataPoolFileMeta.TryRead(target.Path, out var meta)
+                && !string.IsNullOrEmpty(meta.Sha256)
+                && !meta.Sha256.Equals(remoteHash, StringComparison.OrdinalIgnoreCase))
+            {
+                return (RemoteVerifyOutcome.RemoteHashMismatch, localSize, result.ContentLength);
+            }
+        }
+
+        return (RemoteVerifyOutcome.RemoteOk, localSize, result.ContentLength);
     }
 
     /// <summary>
@@ -195,6 +293,27 @@ public enum VerifyOutcome
 
 public sealed record VerifyMismatch(string Symbol, string Path, VerifyOutcome Outcome);
 
+/// <summary>
+/// Outcome of the remote (source-side) check on a single file. Only applies
+/// when <c>--remote</c> was passed and the local check returned
+/// <see cref="VerifyOutcome.Ok"/>; otherwise this stays <see cref="NotChecked"/>.
+/// </summary>
+public enum RemoteVerifyOutcome
+{
+    NotChecked,
+    RemoteOk,
+    RemoteSizeMismatch,
+    RemoteHashMismatch,
+    RemoteUnreachable
+}
+
+public sealed record RemoteVerifyMismatch(
+    string Symbol,
+    string Path,
+    RemoteVerifyOutcome Outcome,
+    long? LocalSize,
+    long? RemoteSize);
+
 public sealed class CacheVerifyReport
 {
     /// <summary>
@@ -206,8 +325,11 @@ public sealed class CacheVerifyReport
     public required string PoolPath { get; init; }
     public bool PoolExists { get; init; }
     public int FilesPlanned { get; init; }
+    public bool RemoteCheckPerformed { get; init; }
+    public bool RemoteByteExact { get; init; }
     public List<SymbolVerifyReport> Symbols { get; } = new();
     public List<VerifyMismatch> Mismatches { get; } = new();
+    public List<RemoteVerifyMismatch> RemoteMismatches { get; } = new();
 
     public int TotalOk => Symbols.Sum(s => s.OkCount);
     public int TotalNoMetadata => Symbols.Sum(s => s.NoMetadataCount);
@@ -215,7 +337,25 @@ public sealed class CacheVerifyReport
     public int TotalHashMismatch => Symbols.Sum(s => s.HashMismatchCount);
     public int TotalIoError => Symbols.Sum(s => s.IoErrorCount);
     public int TotalProblems => TotalNoMetadata + TotalSizeMismatch + TotalHashMismatch + TotalIoError;
-    public bool AllClean => PoolExists && TotalProblems == 0 && FilesPlanned > 0;
+
+    // Remote-side aggregates. All zero when RemoteCheckPerformed=false.
+    public int TotalRemoteOk => Symbols.Sum(s => s.RemoteOkCount);
+    public int TotalRemoteSizeMismatch => Symbols.Sum(s => s.RemoteSizeMismatchCount);
+    public int TotalRemoteHashMismatch => Symbols.Sum(s => s.RemoteHashMismatchCount);
+    public int TotalRemoteUnreachable => Symbols.Sum(s => s.RemoteUnreachableCount);
+    public int TotalRemoteChecked => TotalRemoteOk + TotalRemoteSizeMismatch + TotalRemoteHashMismatch + TotalRemoteUnreachable;
+    public int TotalRemoteProblems => TotalRemoteSizeMismatch + TotalRemoteHashMismatch + TotalRemoteUnreachable;
+
+    /// <summary>
+    /// True when the pool exists, every cached file passed local verification,
+    /// AND (if a remote check was performed) every file also passed the remote
+    /// check. A locally-clean pool with --remote drift is NOT AllClean.
+    /// </summary>
+    public bool AllClean =>
+        PoolExists
+        && TotalProblems == 0
+        && FilesPlanned > 0
+        && (!RemoteCheckPerformed || TotalRemoteProblems == 0);
 
     public string Render()
     {
@@ -259,18 +399,57 @@ public sealed class CacheVerifyReport
             }
         }
 
+        // Remote (source-side) section, only when --remote was passed.
+        if (RemoteCheckPerformed)
+        {
+            sb.AppendLine();
+            var modeLabel = RemoteByteExact ? "byte-exact" : "size-only";
+            sb.AppendLine($"Remote drift check ({modeLabel} vs Dukascopy):");
+            sb.AppendLine($"  Files probed:    {TotalRemoteChecked,8:N0}  (locally-bad files skipped)");
+            sb.AppendLine($"  Remote ok:       {TotalRemoteOk,8:N0}");
+            if (TotalRemoteSizeMismatch > 0) sb.AppendLine($"  Size drift:      {TotalRemoteSizeMismatch,8:N0}  (Dukascopy size differs from cache)");
+            if (TotalRemoteHashMismatch > 0) sb.AppendLine($"  Hash drift:      {TotalRemoteHashMismatch,8:N0}  (Dukascopy bytes differ; same length)");
+            if (TotalRemoteUnreachable > 0)  sb.AppendLine($"  Unreachable:     {TotalRemoteUnreachable,8:N0}  (404 / network failure)");
+
+            if (RemoteMismatches.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"Remote drift detail (first {RemoteMismatches.Count:N0}):");
+                foreach (var m in RemoteMismatches)
+                {
+                    var sizes = m.LocalSize is long ls && m.RemoteSize is long rs
+                        ? $"local {ls,8:N0}B / remote {rs,8:N0}B"
+                        : "size unknown";
+                    sb.AppendLine($"  [{m.Outcome,-19}] {sizes}  {m.Path}");
+                }
+                if (TotalRemoteProblems > RemoteMismatches.Count)
+                {
+                    sb.AppendLine($"  ... {TotalRemoteProblems - RemoteMismatches.Count:N0} more not shown");
+                }
+            }
+        }
+
         sb.AppendLine();
         if (FilesPlanned == 0)
         {
             sb.AppendLine("No .bi5 files found in pool — nothing to verify.");
         }
-        else if (TotalProblems == 0)
+        else if (TotalProblems == 0 && (!RemoteCheckPerformed || TotalRemoteProblems == 0))
         {
-            sb.AppendLine("All cached files verified clean.");
+            sb.AppendLine(RemoteCheckPerformed
+                ? "All cached files verified clean against local sidecars and Dukascopy."
+                : "All cached files verified clean.");
         }
         else
         {
-            sb.AppendLine($"{TotalProblems:N0} problem(s) found. Delete affected files and re-run `cache update` to refetch.");
+            if (TotalProblems > 0)
+            {
+                sb.AppendLine($"{TotalProblems:N0} local problem(s) found. Run `cache repair` to fix or `cache cleanup` to remove the dead files.");
+            }
+            if (RemoteCheckPerformed && TotalRemoteProblems > 0)
+            {
+                sb.AppendLine($"{TotalRemoteProblems:N0} remote drift issue(s). Run `cache repair` to refetch the affected files.");
+            }
         }
 
         return sb.ToString();
@@ -286,6 +465,14 @@ public sealed class SymbolVerifyReport
     public int HashMismatchCount { get; private set; }
     public int IoErrorCount { get; private set; }
 
+    // Remote-side counters; zero unless --remote was passed.
+    public int RemoteOkCount { get; private set; }
+    public int RemoteSizeMismatchCount { get; private set; }
+    public int RemoteHashMismatchCount { get; private set; }
+    public int RemoteUnreachableCount { get; private set; }
+    public int RemoteCheckedCount =>
+        RemoteOkCount + RemoteSizeMismatchCount + RemoteHashMismatchCount + RemoteUnreachableCount;
+
     public int TotalCount =>
         OkCount + NoMetadataCount + SizeMismatchCount + HashMismatchCount + IoErrorCount;
 
@@ -298,6 +485,18 @@ public sealed class SymbolVerifyReport
             case VerifyOutcome.SizeMismatch: SizeMismatchCount++; break;
             case VerifyOutcome.HashMismatch: HashMismatchCount++; break;
             case VerifyOutcome.IoError: IoErrorCount++; break;
+        }
+    }
+
+    public void IncrementRemote(RemoteVerifyOutcome outcome)
+    {
+        switch (outcome)
+        {
+            case RemoteVerifyOutcome.RemoteOk: RemoteOkCount++; break;
+            case RemoteVerifyOutcome.RemoteSizeMismatch: RemoteSizeMismatchCount++; break;
+            case RemoteVerifyOutcome.RemoteHashMismatch: RemoteHashMismatchCount++; break;
+            case RemoteVerifyOutcome.RemoteUnreachable: RemoteUnreachableCount++; break;
+            // NotChecked: do nothing — this file wasn't probed remotely.
         }
     }
 }

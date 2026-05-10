@@ -200,7 +200,8 @@ public sealed class CacheVerifierTests : IDisposable
         CreateTickFile("EURUSD", 2025, 0, 2, 10, new byte[] { 1, 2, 3, 4 }, writeMeta: false);
         var report = new CacheVerifier(_root).Verify();
         var rendered = report.Render();
-        Assert.Contains("problem(s) found", rendered);
-        Assert.Contains("re-run `cache update`", rendered);
+        Assert.Contains("local problem(s) found", rendered);
+        // Now points users at the dedicated repair / cleanup tools.
+        Assert.Contains("cache repair", rendered);
     }
 }

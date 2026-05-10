@@ -137,6 +137,22 @@ internal static class CommonParsingHelpers
     public static bool ParseTrustExisting(IReadOnlyDictionary<string, string> args) =>
         args.ContainsKey("trust-existing");
 
+    /// <summary>
+    /// `--remote` for `cache verify`. Adds a per-file probe to Dukascopy to
+    /// detect drift between cached files and source bytes (e.g. amended ticks).
+    /// </summary>
+    public static bool ParseRemote(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("remote");
+
+    /// <summary>
+    /// `--size-only` for `cache verify --remote`. Skips byte-exact hashing and
+    /// only compares Content-Length against local file size. Faster (no body
+    /// download) but won't catch same-length content changes. Default is
+    /// byte-exact (download + SHA-256), per the user-chosen safety.
+    /// </summary>
+    public static bool ParseSizeOnly(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("size-only");
+
     public static bool ParseRefreshCache(IReadOnlyDictionary<string, string> args) =>
         !args.ContainsKey("no-refresh");
 
