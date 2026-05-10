@@ -158,4 +158,108 @@ public sealed class PoolAuditorTests : IDisposable
         Assert.Contains("GBPUSD", rendered);
         Assert.Contains("Symbols cached: 2", rendered);
     }
+
+    // ---------- Per-month / per-year coverage grid (BACKLOG #14) ----------
+
+    [Fact]
+    public void Audit_TracksHourTickFilesByMonth()
+    {
+        // EURUSD with 3 ticks in 2025-01 (Dukascopy month 0) and 1 tick in 2025-02.
+        CreateTickFile("EURUSD", 2025, 0, 2, 10);
+        CreateTickFile("EURUSD", 2025, 0, 2, 11);
+        CreateTickFile("EURUSD", 2025, 0, 2, 12);
+        CreateTickFile("EURUSD", 2025, 1, 5, 10);
+
+        var report = new PoolAuditor(_root).Audit();
+        var symbol = Assert.Single(report.Symbols);
+
+        // Stored as calendar months (Dukascopy 0 == January, etc.)
+        Assert.Equal(3, symbol.HourTickFilesIn(2025, 1));
+        Assert.Equal(1, symbol.HourTickFilesIn(2025, 2));
+        Assert.Equal(4, symbol.HourTickFilesIn(2025));
+        Assert.Equal(0, symbol.HourTickFilesIn(2024)); // year not present
+    }
+
+    [Fact]
+    public void CoveredYears_ReturnsDistinctSortedYears()
+    {
+        CreateTickFile("EURUSD", 2024, 0, 2, 10);
+        CreateTickFile("EURUSD", 2025, 0, 2, 10);
+        CreateTickFile("EURUSD", 2024, 5, 15, 10);
+
+        var report = new PoolAuditor(_root).Audit();
+        var symbol = Assert.Single(report.Symbols);
+
+        Assert.Equal(new[] { 2024, 2025 }, symbol.CoveredYears().ToArray());
+    }
+
+    [Fact]
+    public void RenderByYear_ShowsCoverageGrid()
+    {
+        // EURUSD: ticks in 2024 only. GBPUSD: ticks in 2024 and 2025.
+        CreateTickFile("EURUSD", 2024, 0, 2, 10);
+        CreateTickFile("GBPUSD", 2024, 0, 2, 10);
+        CreateTickFile("GBPUSD", 2025, 0, 2, 10);
+
+        var rendered = new PoolAuditor(_root).Audit().RenderByYear();
+
+        Assert.Contains("Year-by-year coverage:", rendered);
+        Assert.Contains("EURUSD", rendered);
+        Assert.Contains("GBPUSD", rendered);
+        Assert.Contains("2024", rendered);
+        Assert.Contains("2025", rendered);
+        // EURUSD has no 2025 data so the cell should be `-`
+        // (just check that the grid contains the dash sentinel somewhere)
+        Assert.Contains("-", rendered);
+    }
+
+    [Fact]
+    public void RenderByMonth_ShowsTwelveMonthsPerYear()
+    {
+        // Single tick in January (Dukascopy month 0 == calendar month 1).
+        CreateTickFile("EURUSD", 2025, 0, 2, 10);
+
+        var rendered = new PoolAuditor(_root).Audit().RenderByMonth();
+
+        Assert.Contains("EURUSD month-by-month:", rendered);
+        Assert.Contains("Jan", rendered);
+        Assert.Contains("Dec", rendered);
+        Assert.Contains("2025", rendered);
+        // Months without files render as `-`
+        Assert.Contains("-", rendered);
+    }
+
+    [Fact]
+    public void RenderByMonth_HandlesEmptyPool()
+    {
+        var rendered = new PoolAuditor(_root).Audit().RenderByMonth();
+        Assert.Contains("no hour-tick files", rendered);
+    }
+
+    [Fact]
+    public void RenderByYear_HandlesEmptyPool()
+    {
+        var rendered = new PoolAuditor(_root).Audit().RenderByYear();
+        Assert.Contains("no hour-tick files", rendered);
+    }
+
+    [Fact]
+    public void ExpectedWeekdayHoursInMonth_CountsWeekdaysOnly()
+    {
+        // January 2025 has 31 days: 23 weekdays (Mon-Fri) + 8 weekend days (4 Sat + 4 Sun).
+        var hours = PoolAuditor.ExpectedWeekdayHoursInMonth(2025, 1);
+        Assert.Equal(23 * 24, hours);
+
+        // February 2025 has 28 days. Feb 1 = Saturday, so 20 weekdays.
+        Assert.Equal(20 * 24, PoolAuditor.ExpectedWeekdayHoursInMonth(2025, 2));
+    }
+
+    [Fact]
+    public void ExpectedWeekdayHoursInYear_AggregatesAllMonths()
+    {
+        // 2024 was a leap year (366 days). 366/7 = 52 full weeks + 2 extra days.
+        // 2024-01-01 was a Monday, so the +2 days are Mon+Tue (both weekdays).
+        // 52 weeks × 5 weekdays + 2 = 262 weekdays × 24h = 6288h.
+        Assert.Equal(262 * 24, PoolAuditor.ExpectedWeekdayHoursInYear(2024));
+    }
 }

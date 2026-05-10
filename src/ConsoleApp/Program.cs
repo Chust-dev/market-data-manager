@@ -261,6 +261,18 @@ public static class Program
         var auditor = new PoolAuditor(poolPath);
         var report = auditor.Audit(options.InstrumentFilter);
         Console.Write(report.Render());
+
+        if (options.ByYear)
+        {
+            Console.WriteLine();
+            Console.Write(report.RenderByYear());
+        }
+        if (options.EffectiveByMonth)
+        {
+            Console.WriteLine();
+            Console.Write(report.RenderByMonth());
+        }
+
         return report.PoolExists ? 0 : 1;
     }
 
@@ -483,8 +495,9 @@ public static class Program
         Console.WriteLine("                 Refresh the rolling N-day window (default 60 days). For weekly maintenance.");
         Console.WriteLine("  cache discover [--instrument SYM | --symbols all] [--since 2000-01-01] [--parallel 4] [--refresh]");
         Console.WriteLine("                 Find earliest available date per symbol on Dukascopy; record into instruments.json.");
-        Console.WriteLine("  cache audit    [--instrument SYM]");
+        Console.WriteLine("  cache audit    [--instrument SYM] [--by-year] [--by-month | --no-by-month]");
         Console.WriteLine("                 Inspect the cache: file counts, coverage, disk usage.");
+        Console.WriteLine("                 --by-year / --by-month add finer-grained coverage grids; month is auto-included for single-symbol audits.");
         Console.WriteLine("  cache verify   [--instrument SYM] [--remote [--size-only]] [--quiet]");
         Console.WriteLine("                 Recompute SHA-256 vs sidecar (local) and optionally probe Dukascopy for drift.");
         Console.WriteLine("  cache repair   [--instrument SYM] [--dry-run] [--trust-existing] [--quiet]");

@@ -115,6 +115,13 @@ public sealed class PoolAuditor
                         if (name.EndsWith(TicksFileSuffix, StringComparison.OrdinalIgnoreCase))
                         {
                             result.HourTickFiles++;
+                            // Per-(year, calendar-month) bucket so the optional
+                            // `cache audit --by-year` / `--by-month` views can
+                            // compute a finer-grained coverage grid without a
+                            // second walk.
+                            var key = (year, calMonth);
+                            result.HourTickFilesByMonth[key] =
+                                result.HourTickFilesByMonth.TryGetValue(key, out var prev) ? prev + 1 : 1;
                             if (TryParseHour(name, out var hour))
                             {
                                 var ts = new DateTimeOffset(year, calMonth, day, hour, 0, 0, TimeSpan.Zero);
@@ -168,6 +175,39 @@ public sealed class PoolAuditor
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Expected hour-tick files for a calendar month, counting Mon–Fri
+    /// only (Saturday and Sunday are weekends in forex). Conservative:
+    /// counts each weekday as 24 hours, slightly overestimating because
+    /// Friday tails off around 21:00 UTC. Fully-cached months will render
+    /// as ~98% rather than 100% for that reason; the relative comparison
+    /// across months remains accurate.
+    /// </summary>
+    public static int ExpectedWeekdayHoursInMonth(int year, int month)
+    {
+        var hours = 0;
+        var days = DateTime.DaysInMonth(year, month);
+        for (var d = 1; d <= days; d++)
+        {
+            var dow = new DateTime(year, month, d).DayOfWeek;
+            if (dow != DayOfWeek.Saturday && dow != DayOfWeek.Sunday)
+            {
+                hours += 24;
+            }
+        }
+        return hours;
+    }
+
+    public static int ExpectedWeekdayHoursInYear(int year)
+    {
+        var total = 0;
+        for (var m = 1; m <= 12; m++)
+        {
+            total += ExpectedWeekdayHoursInMonth(year, m);
+        }
+        return total;
     }
 }
 
@@ -224,6 +264,112 @@ public sealed class PoolAuditReport
         if (bytes >= KB) return $"{bytes / KB:F0} KB";
         return $"{bytes} B";
     }
+
+    /// <summary>
+    /// Year-level coverage grid: rows = symbols, columns = years observed.
+    /// Each cell shows percentage of expected weekday hours that are cached
+    /// in that year. Empty when no symbols have any hour-tick files.
+    /// </summary>
+    public string RenderByYear()
+    {
+        if (Symbols.Count == 0 || Symbols.All(s => s.HourTickFilesByMonth.Count == 0))
+        {
+            return "Year-by-year coverage: (no hour-tick files in scope)\n";
+        }
+
+        var allYears = Symbols
+            .SelectMany(s => s.CoveredYears())
+            .Distinct()
+            .OrderBy(y => y)
+            .ToList();
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Year-by-year coverage:");
+        sb.Append($"  {"Symbol",-10}");
+        foreach (var y in allYears)
+        {
+            sb.Append($" {y,7}");
+        }
+        sb.AppendLine();
+
+        foreach (var s in Symbols)
+        {
+            sb.Append($"  {s.Symbol,-10}");
+            foreach (var y in allYears)
+            {
+                var actual = s.HourTickFilesIn(y);
+                if (actual == 0)
+                {
+                    sb.Append($" {"-",7}");
+                    continue;
+                }
+                var expected = PoolAuditor.ExpectedWeekdayHoursInYear(y);
+                var pct = expected > 0 ? Math.Min(1.0, (double)actual / expected) : 0;
+                sb.Append($" {pct,7:P1}");
+            }
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Month-level coverage grid, one block per symbol. Inside each block:
+    /// rows = years, columns = Jan–Dec, cells = coverage percentage. Use
+    /// `-` for months with zero cached files (typically the very start or
+    /// very end of a symbol's history).
+    /// </summary>
+    public string RenderByMonth()
+    {
+        if (Symbols.Count == 0 || Symbols.All(s => s.HourTickFilesByMonth.Count == 0))
+        {
+            return "Month-by-month coverage: (no hour-tick files in scope)\n";
+        }
+
+        var sb = new StringBuilder();
+        var monthNames = new[] { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+        var first = true;
+        foreach (var s in Symbols)
+        {
+            if (s.HourTickFilesByMonth.Count == 0)
+            {
+                continue;
+            }
+
+            if (!first) sb.AppendLine();
+            first = false;
+
+            sb.AppendLine($"{s.Symbol} month-by-month:");
+            sb.Append($"  {"",-6}");
+            foreach (var n in monthNames)
+            {
+                sb.Append($" {n,5}");
+            }
+            sb.AppendLine();
+
+            foreach (var year in s.CoveredYears())
+            {
+                sb.Append($"  {year,-6}");
+                for (var m = 1; m <= 12; m++)
+                {
+                    var actual = s.HourTickFilesIn(year, m);
+                    if (actual == 0)
+                    {
+                        sb.Append($" {"-",5}");
+                        continue;
+                    }
+                    var expected = PoolAuditor.ExpectedWeekdayHoursInMonth(year, m);
+                    var pct = expected > 0 ? Math.Min(1.0, (double)actual / expected) : 0;
+                    sb.Append($" {pct,5:P0}");
+                }
+                sb.AppendLine();
+            }
+        }
+
+        return sb.ToString();
+    }
+
 }
 
 public sealed class SymbolAuditReport
@@ -238,4 +384,21 @@ public sealed class SymbolAuditReport
     public DateTimeOffset? LastHour { get; set; }
     public long ExpectedWeekdayHours { get; set; }
     public double CoverageRate { get; set; }
+
+    /// <summary>
+    /// Hour-tick file counts bucketed by (year, calendarMonth). Populated
+    /// during the same walk that builds <see cref="HourTickFiles"/>; used
+    /// only when the caller renders the by-year / by-month coverage grids.
+    /// </summary>
+    public Dictionary<(int Year, int Month), int> HourTickFilesByMonth { get; } = new();
+
+    public int HourTickFilesIn(int year) =>
+        HourTickFilesByMonth.Where(kv => kv.Key.Year == year).Sum(kv => kv.Value);
+
+    public int HourTickFilesIn(int year, int month) =>
+        HourTickFilesByMonth.TryGetValue((year, month), out var n) ? n : 0;
+
+    /// <summary>Years for which at least one hour-tick file is cached.</summary>
+    public IEnumerable<int> CoveredYears() =>
+        HourTickFilesByMonth.Keys.Select(k => k.Year).Distinct().OrderBy(y => y);
 }

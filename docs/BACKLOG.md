@@ -28,7 +28,7 @@ re-downloading everything.
 |---|------|--------|-------|
 | 12 | `cache verify` — local checksum verification | done | SHA-256 vs `.bi5.meta.json` sidecar; per-symbol report; ProgressBar wired |
 | 13 | `cache verify --remote` — drift verification against Dukascopy | done | byte-exact by default; `--size-only` for fast Content-Length compare; locally-bad files skipped |
-| 14 | Coverage report per month / per year | pending | extends `cache audit`; finer-grained holes report |
+| 14 | Coverage report per month / per year | done | `--by-year` and `--by-month` flags on cache audit; month grid auto-included for single-symbol audits |
 | 20 | `cache repair` — auto-fix corrupt files | done | refetch via DukascopyClient, or regenerate sidecar with `--trust-existing`; `--dry-run` previews |
 | 21 | `cache cleanup` — remove zero-byte / orphan files | done | deletes by default; `--dry-run` previews; prunes empty parent dirs; preserves symbol root |
 | 22 | `cache add-symbol` / `cache remove-symbol` | pending | manage `instruments.json.digits` from CLI |

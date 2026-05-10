@@ -22,7 +22,7 @@ scripts.
 HistoricalData cache update   --instrument EURUSD --start ... --end ...
 HistoricalData cache catchup  [--instrument EURUSD | --symbols all] [--window 60]
 HistoricalData cache discover [--instrument EURUSD | --symbols all] [--since 2000-01-01]
-HistoricalData cache audit    [--instrument EURUSD]
+HistoricalData cache audit    [--instrument EURUSD] [--by-year] [--by-month | --no-by-month]
 HistoricalData cache verify   [--instrument EURUSD] [--remote [--size-only]] [--quiet]
 HistoricalData cache repair   [--instrument EURUSD] [--dry-run] [--trust-existing] [--quiet]
 HistoricalData cache cleanup  [--instrument EURUSD] [--dry-run] [--quiet]
@@ -325,6 +325,48 @@ weekday hours between `FirstHour` and `LastHour`. ~95–100% is healthy for a
 recently completed download; anything significantly lower suggests gaps to
 re-fetch (a re-run with the same `--start`/`--end` will fill them). Audit is
 fast (seconds) because it does not decompress the `.bi5` files.
+
+### Coverage by year and by month
+
+The single-number coverage above answers "is this symbol roughly complete?"
+but not "where exactly are the gaps?". Two opt-in flags add finer-grained
+grids:
+
+```text
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- cache audit --by-year
+```
+
+`--by-year` adds a grid where each row is a symbol and each column is a year
+that has at least one cached file. Cells show coverage % for that year (or
+`-` if the symbol has no files that year).
+
+```text
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- cache audit --instrument EURUSD
+```
+
+When `--instrument SYM` is passed (single-symbol audit), the **month grid is
+included automatically** — output is bounded to one symbol so the extra
+detail is almost always wanted. The grid shows each year as a row and
+Jan–Dec as columns, with each cell showing coverage % for that month:
+
+```text
+EURUSD month-by-month:
+       Jan   Feb   Mar   Apr   May   Jun   Jul   Aug   Sep   Oct   Nov   Dec
+2003     -     -     -     -   62%   96%   97%   97%   96%   97%   97%   97%
+2004    97%   97%   96%   97%   96%   97%   97%   97%   96%   97%   97%   97%
+...
+```
+
+Cells: `-` for months with zero files (typically the start or end of a
+symbol's history); a percentage otherwise. Coverage is `cached_hour_files /
+(weekdays_in_month × 24)`. The denominator slightly overestimates expected
+hours (forex doesn't trade Friday 22:00 onwards), so a fully-cached month
+typically renders as ~98% rather than 100%; the relative comparison between
+months is what matters.
+
+To suppress the auto-include for a single-symbol audit, pass `--no-by-month`.
+To force the grid for a multi-symbol audit (one block per symbol), pass
+`--by-month` explicitly.
 
 ## Verifying the cache
 

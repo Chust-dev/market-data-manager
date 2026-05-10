@@ -153,6 +153,28 @@ internal static class CommonParsingHelpers
     public static bool ParseSizeOnly(IReadOnlyDictionary<string, string> args) =>
         args.ContainsKey("size-only");
 
+    /// <summary>
+    /// `--by-year` for `cache audit`. Adds a year-level coverage grid (rows
+    /// = symbols, columns = years observed) to the audit report.
+    /// </summary>
+    public static bool ParseByYear(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("by-year");
+
+    /// <summary>
+    /// `--by-month` for `cache audit`. Adds a per-symbol year × month
+    /// coverage grid. Auto-included when a single-symbol filter is in
+    /// effect (the output is bounded), unless the user passes `--no-by-month`.
+    /// </summary>
+    public static bool ParseByMonth(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("by-month");
+
+    /// <summary>
+    /// `--no-by-month` opt-out for the auto-include behaviour. Useful when
+    /// scripting a single-symbol audit and only wanting the summary table.
+    /// </summary>
+    public static bool ParseNoByMonth(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("no-by-month");
+
     public static bool ParseRefreshCache(IReadOnlyDictionary<string, string> args) =>
         !args.ContainsKey("no-refresh");
 
