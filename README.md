@@ -24,6 +24,7 @@ HistoricalData cache catchup  [--instrument EURUSD | --symbols all] [--window 60
 HistoricalData cache discover [--instrument EURUSD | --symbols all] [--since 2000-01-01]
 HistoricalData cache audit    [--instrument EURUSD]
 HistoricalData cache verify   [--instrument EURUSD] [--quiet]
+HistoricalData cache repair   [--instrument EURUSD] [--dry-run] [--trust-existing] [--quiet]
 HistoricalData export bars    --instrument EURUSD --start ... --end ... --timeframe m1
 HistoricalData export ticks   --instrument EURUSD --start ... --end ...
 ```
@@ -37,6 +38,8 @@ earliest available date per symbol and records it in
 bound. `cache audit` reports on the pool's shape (no network).
 `cache verify` recomputes SHA-256 on every cached file and flags drift
 versus the sidecar metadata written at download time (no network).
+`cache repair` consumes verify's output and surgically re-downloads
+problem files (or regenerates missing sidecars).
 `export bars` and `export ticks` are offline operations that read
 from the pool and produce MT5-compatible files; they never reach
 Dukascopy. Run `--help` for the full subcommand reference.
@@ -351,9 +354,45 @@ exit code: 0 = clean, 1 = problems found or run cancelled).
 
 Verification rehashes every file, so it's CPU-bound and slow on full
 pools — expect a few minutes per GB on typical hardware. Press `Ctrl+C`
-to cancel mid-run; partial results are not saved. To remediate problems,
-delete the affected files (and their `.meta.json` sidecars) and re-run
-`cache update` to refetch.
+to cancel mid-run; partial results are not saved.
+
+## Repairing the cache
+
+`cache repair` consumes the same per-file checks as verify, then auto-fixes
+the problems:
+
+```text
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- cache repair
+```
+
+For each problem file the repair pipeline picks one of two actions:
+
+- **Refetch** — re-download the file from Dukascopy. The fresh bytes
+  overwrite the local cache file and a fresh `.meta.json` sidecar is
+  written. Default for `SizeMismatch`, `HashMismatch`, and `NoMetadata`.
+- **Regenerate sidecar** — trust the local file, compute its current
+  SHA-256, and write a `.meta.json` from those bytes. No network. Used
+  for `NoMetadata` only when `--trust-existing` is passed.
+
+Files that fail to refetch (Dukascopy returned 404, repeated network
+failure) are left untouched and reported. Files with `IoError` are
+skipped — they need manual investigation.
+
+Useful flags:
+
+- `--dry-run` — print exactly what would happen without changing anything.
+  Always run this once before a real repair on a large pool.
+- `--trust-existing` — for users with old caches predating sidecars: skip
+  the refetch and just generate sidecars from current bytes. Fast, no
+  bandwidth. Only safe if you have reason to believe the local files
+  themselves are clean.
+- `--instrument` / `--symbols` — narrow the repair to one symbol or a list.
+- `--quiet` — silence the progress bar; suitable for scheduled jobs.
+
+Exit code: `0` if the pool was already clean or every problem was
+resolved, `1` if any file is still bad after the run (or the run was
+cancelled). A successful `cache repair --dry-run` always exits `0` — it's
+informational.
 
 ## Data Pool Structure
 

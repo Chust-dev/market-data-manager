@@ -133,7 +133,7 @@ public sealed class CacheVerifier
                 bySymbol[target.Symbol] = symbolReport;
             }
 
-            var outcome = VerifyOne(target.Path);
+            var outcome = Inspect(target.Path);
             symbolReport.Increment(outcome);
 
             if (outcome != VerifyOutcome.Ok && report.Mismatches.Count < CacheVerifyReport.MaxMismatchesShown)
@@ -148,7 +148,13 @@ public sealed class CacheVerifier
         return report;
     }
 
-    private static VerifyOutcome VerifyOne(string filePath)
+    /// <summary>
+    /// Inspects a single .bi5 file: reads its sidecar metadata, recomputes
+    /// SHA-256, returns the outcome enum. Pure / static — same primitive used
+    /// internally by <see cref="RunPlan"/> and externally by
+    /// <see cref="CacheRepairer"/> to drive its repair dispatch.
+    /// </summary>
+    public static VerifyOutcome Inspect(string filePath)
     {
         if (!DataPoolFileMeta.TryRead(filePath, out var meta))
         {

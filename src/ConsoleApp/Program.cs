@@ -247,6 +247,7 @@ public static class Program
             ("cache", "catchup") => new CacheCatchupCommand(),
             ("cache", "discover") => new CacheDiscoverCommand(),
             ("cache", "verify") => new CacheVerifyCommand(),
+            ("cache", "repair") => new CacheRepairCommand(),
             ("export", "bars") => new ExportBarsCommand(),
             ("export", "ticks") => new ExportTicksCommand(),
             _ => null
@@ -318,6 +319,76 @@ public static class Program
         return report.AllClean ? 0 : 1;
     }
 
+    /// <summary>
+    /// Drives the repair flow for `cache repair`. Composes the Manage pillar's
+    /// <see cref="CacheRepairer"/> with a Download-pillar
+    /// <see cref="DukascopyFileRefetcher"/> so the orchestrator stays
+    /// network-agnostic and unit-testable. Exit codes: 0 if every problem
+    /// resolved (or pool was clean), 1 otherwise (problems remain, run
+    /// cancelled, or pool path missing).
+    /// </summary>
+    internal static async Task<int> RunRepairAsync(CacheRepairOptions options)
+    {
+        var poolPath = PathUtils.NormalizePath(options.PoolPath);
+
+        if (!Directory.Exists(poolPath))
+        {
+            Console.WriteLine($"Pool path does not exist: {poolPath}");
+            return 1;
+        }
+
+        // The repair pipeline borrows the existing DukascopyClient — same
+        // retry / backoff / base-URL fallback as the bulk downloaders.
+        var httpConfig = HttpConfig.Load(AppOptions.Defaults.HttpConfigPath);
+        var client = new DukascopyClient(httpConfig, poolPath, verbose: false);
+        var refetcher = new HistoricalData.Download.DukascopyFileRefetcher(client);
+        var repairer = new CacheRepairer(poolPath, refetcher);
+
+        var plan = repairer.PlanFiles(options.InstrumentFilter);
+        if (plan.Count == 0)
+        {
+            Console.WriteLine($"No .bi5 files found in {poolPath}");
+            return 0;
+        }
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
+        if (!options.Quiet)
+        {
+            var mode = options.DryRun ? "Dry-run" : (options.TrustExisting ? "Repairing (trust-existing)" : "Repairing");
+            Console.WriteLine($"{mode}: inspecting {plan.Count:N0} cached file(s) in {poolPath}...");
+        }
+
+        CacheRepairReport report;
+        try
+        {
+            using var pb = new ProgressBar("Repair", plan.Count, () => repairer.FilesProcessed, options.Quiet);
+            report = await repairer.RunPlanAsync(plan, options.DryRun, options.TrustExisting, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Repair cancelled.");
+            return 1;
+        }
+
+        Console.WriteLine();
+        Console.Write(report.Render());
+
+        if (options.DryRun)
+        {
+            // Dry-run is informational; not an error if the pool has problems
+            // — the user wanted to know what would happen, and now they do.
+            return 0;
+        }
+        return report.ProblemsFound == 0 || report.AllResolved ? 0 : 1;
+    }
+
     private static void PrintHelp()
     {
         Console.WriteLine("Dukascopy Historical Tick Downloader");
@@ -333,6 +404,8 @@ public static class Program
         Console.WriteLine("                 Inspect the cache: file counts, coverage, disk usage.");
         Console.WriteLine("  cache verify   [--instrument SYM] [--quiet]");
         Console.WriteLine("                 Recompute SHA-256 on cached .bi5 files; flag drift vs sidecar metadata.");
+        Console.WriteLine("  cache repair   [--instrument SYM] [--dry-run] [--trust-existing] [--quiet]");
+        Console.WriteLine("                 Auto-fix files flagged by verify (refetch from Dukascopy or regenerate sidecar).");
         Console.WriteLine("  export bars    --instrument SYM --start ISO --end ISO --timeframe TF [--format csv|csv+hst]");
         Console.WriteLine("                 Read cache (offline), write MT5 bar CSV/HST.");
         Console.WriteLine("  export ticks   --instrument SYM --start ISO --end ISO");

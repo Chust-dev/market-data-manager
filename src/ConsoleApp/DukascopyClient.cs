@@ -426,6 +426,65 @@ public sealed class DukascopyClient
         return totalTicks;
     }
 
+    /// <summary>
+    /// Refetches a single .bi5 file from Dukascopy at a known
+    /// (instrument, year, dukaMonth, day, fileName) coordinate and overwrites
+    /// the local cache file (and its .meta.json sidecar) on success. Used by
+    /// `cache repair` to surgically replace specific corrupt or missing files
+    /// without re-running a full date-range download.
+    ///
+    /// Returns true on success, false on NotFound or repeated network failure
+    /// — caller should treat false as "still bad, leave the original alone".
+    /// Honours the configured retry count and base-URL fallback list, same as
+    /// the bulk downloaders. Unlike them, does NOT try month variants — the
+    /// caller knows exactly which (year, month, day) coordinate the cached
+    /// file is filed under, so we go straight to that URL.
+    /// </summary>
+    public async Task<bool> RefetchFileAsync(
+        string instrument,
+        int year,
+        int dukaMonth,
+        int day,
+        string fileName,
+        CancellationToken cancellationToken = default)
+    {
+        var relativePath = $"{instrument}/{year:0000}/{dukaMonth:00}/{day:00}/{fileName}";
+        var localPath = _pool.GetLocalPath(instrument, year, dukaMonth, day, fileName);
+
+        for (var attempt = 1; attempt <= _config.RetryCount; attempt++)
+        {
+            var anyNotFound = true;
+            foreach (var baseUrl in _config.BaseUrls)
+            {
+                var url = $"{baseUrl.TrimEnd('/')}/{relativePath}";
+                var result = await TryDownloadAsync(url, localPath, cancellationToken);
+                if (result.Success)
+                {
+                    return true;
+                }
+
+                if (!result.NotFound)
+                {
+                    anyNotFound = false;
+                }
+            }
+
+            if (anyNotFound)
+            {
+                // Every base URL agreed: file doesn't exist at the source.
+                // No point retrying — the symbol/date was probably never published.
+                return false;
+            }
+
+            if (attempt < _config.RetryCount)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(_config.RetryBackoffSeconds), cancellationToken);
+            }
+        }
+
+        return false;
+    }
+
     private async Task<IReadOnlyList<Bar>> DownloadM1BarsForDayData(
         string instrument,
         DateTimeOffset dayUtc,

@@ -120,6 +120,23 @@ internal static class CommonParsingHelpers
     public static bool ParseQuiet(IReadOnlyDictionary<string, string> args) =>
         args.ContainsKey("quiet");
 
+    /// <summary>
+    /// `--dry-run` for `cache repair` (and any future destructive command).
+    /// When set, the command reports what it WOULD do without making changes.
+    /// </summary>
+    public static bool ParseDryRun(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("dry-run");
+
+    /// <summary>
+    /// `--trust-existing` for `cache repair`. Inverts the default for files
+    /// flagged <c>NoMetadata</c>: instead of refetching from Dukascopy, trust
+    /// the local bytes and just regenerate the missing <c>.meta.json</c>
+    /// sidecar from a fresh hash. Fast (no network) but doesn't help if the
+    /// local file is silently corrupt.
+    /// </summary>
+    public static bool ParseTrustExisting(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("trust-existing");
+
     public static bool ParseRefreshCache(IReadOnlyDictionary<string, string> args) =>
         !args.ContainsKey("no-refresh");
 
