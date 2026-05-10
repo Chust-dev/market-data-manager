@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using HistoricalData.DataPool;
 
-namespace HistoricalData.Audit;
+namespace HistoricalData.Manage;
 
 /// <summary>
 /// Offline checksum verification of cached .bi5 files. For each file in

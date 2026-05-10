@@ -97,7 +97,7 @@ public sealed class DukascopyClient
     /// so a 200 from any combination counts as Available. Doesn't write
     /// anything to the local cache.
     ///
-    /// Used by <see cref="HistoricalData.Audit.CacheDiscoverer"/> to
+    /// Used by <see cref="HistoricalData.Manage.CacheDiscoverer"/> to
     /// binary-search for the earliest day a symbol has data on the source.
     /// </summary>
     public async Task<HourProbeResult> ProbeHourAvailableAsync(

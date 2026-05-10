@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace HistoricalData.Audit;
+namespace HistoricalData.Manage;
 
 /// <summary>
 /// Fast directory-level audit of a Dukascopy data pool. Walks the

@@ -1,4 +1,4 @@
-using HistoricalData.Audit;
+using HistoricalData.Manage;
 
 namespace HistoricalData.Tests;
 

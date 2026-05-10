@@ -56,21 +56,26 @@ with three independent pillars rotating around it:
         │                      │                      │
         ▼                      ▼                      ▼
 ┌───────────────┐     ┌────────────────┐    ┌─────────────────┐
-│   Download    │     │    Display     │    │     Export      │
-│   (network)   │     │   (read-only)  │    │  (read + write) │
+│   Download    │     │     Manage     │    │     Export      │
+│   (network)   │     │  (inspect/fix) │    │  (read + write) │
 │   fills cache │     │ inspects cache │    │ projects cache  │
 └───────────────┘     └────────────────┘    └─────────────────┘
    `cache update`       `cache audit`         `export bars`
-                                              `export ticks`
+                        `cache verify`        `export ticks`
+                        `cache discover`
 ```
 
-**Download** is the only pillar that reaches the network. It fills or
-extends the pool, optionally running gap-repair and validation passes
-that fetch additional files. Lives in `src/ConsoleApp/Download/`.
+**Download** is the only pillar that reaches the network for *bulk*
+data. It fills or extends the pool, optionally running gap-repair and
+validation passes that fetch additional files. Lives in
+`src/ConsoleApp/Download/`.
 
-**Display** reads the cache directory tree without modifying or
-decompressing anything — counts files per symbol, computes coverage
-rate, flags zero-byte downloads. Lives in `src/ConsoleApp/Audit/`.
+**Manage** inspects, audits, and (eventually) repairs the cache —
+counts files per symbol, computes coverage rate, flags zero-byte
+downloads, recomputes SHA-256 to catch silent corruption, and
+binary-searches Dukascopy for symbol availability metadata. Mostly
+read-only; `cache discover` is the one Manage subcommand that issues
+network probes (no bulk downloads). Lives in `src/ConsoleApp/Manage/`.
 
 **Export** reads the cache (no network) and projects it into derivative
 artifacts: M1/higher-timeframe bars as MT5 CSV/HST, raw ticks as

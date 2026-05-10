@@ -1,4 +1,4 @@
-namespace HistoricalData.Audit;
+namespace HistoricalData.Manage;
 
 /// <summary>
 /// Finds the earliest UTC hour Dukascopy has data for a symbol, by
