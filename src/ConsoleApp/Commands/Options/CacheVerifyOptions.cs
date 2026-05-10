@@ -38,7 +38,11 @@ internal sealed record CacheVerifyOptions(
             PoolPath: CommonParsingHelpers.ParsePoolPath(args),
             Remote: CommonParsingHelpers.ParseRemote(args),
             SizeOnly: CommonParsingHelpers.ParseSizeOnly(args),
-            Parallel: CommonParsingHelpers.ParseParallel(args),
+            // Verify probes every cached file (tens of thousands per symbol on
+            // a full history), so 8 concurrent probes is the sensible default
+            // — vs cache discover's 4, which only does a per-symbol binary
+            // search. Both stay well within Dukascopy's tolerated concurrency.
+            Parallel: CommonParsingHelpers.ParseParallel(args, defaultValue: HistoricalData.Manage.CacheVerifier.DefaultRemoteParallelism),
             StartUtc: CommonParsingHelpers.ParseStartUtcOptional(args),
             EndUtc: CommonParsingHelpers.ParseEndUtcOptional(args),
             Quiet: CommonParsingHelpers.ParseQuiet(args));

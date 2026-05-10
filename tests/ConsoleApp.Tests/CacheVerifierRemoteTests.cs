@@ -371,4 +371,27 @@ public sealed class CacheVerifierRemoteTests : IDisposable
         Assert.Equal(CacheVerifier.DefaultRemoteParallelism, report.RemoteParallelism);
         Assert.Equal(8, report.RemoteParallelism); // sanity: default is 8
     }
+
+    [Fact]
+    public void CacheVerifyOptions_DefaultParallelismFromCli_IsEight()
+    {
+        // When --parallel is absent, the CLI options layer must hand 8 to the
+        // verifier (not 4 — that was cache discover's default leaking through
+        // the shared ParseParallel helper before this was fixed).
+        var args = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var options = HistoricalData.Commands.Options.CacheVerifyOptions.FromArgs(args);
+        Assert.Equal(CacheVerifier.DefaultRemoteParallelism, options.Parallel);
+        Assert.Equal(8, options.Parallel);
+    }
+
+    [Fact]
+    public void CacheVerifyOptions_ExplicitParallel_Overrides()
+    {
+        var args = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["parallel"] = "16"
+        };
+        var options = HistoricalData.Commands.Options.CacheVerifyOptions.FromArgs(args);
+        Assert.Equal(16, options.Parallel);
+    }
 }

@@ -273,22 +273,23 @@ internal static class CommonParsingHelpers
     }
 
     /// <summary>
-    /// Per-symbol parallelism for `cache discover`. Default 4 — matches
-    /// Dukascopy's tolerated concurrency without spawning more requests
-    /// than a typical home connection can sustain. Negative or
-    /// unparseable values fall back to default.
+    /// Per-symbol parallelism for any command exposing <c>--parallel N</c>.
+    /// Each caller chooses its own default: <c>cache discover</c> uses 4
+    /// (its workload is a binary search per symbol — light), <c>cache verify
+    /// --remote</c> uses 8 (it fans out per-file probes across the whole
+    /// pool — much heavier and benefits from more concurrency). Negative
+    /// or unparseable values fall back to <paramref name="defaultValue"/>.
     /// </summary>
-    public static int ParseParallel(IReadOnlyDictionary<string, string> args)
+    public static int ParseParallel(IReadOnlyDictionary<string, string> args, int defaultValue)
     {
-        const int DefaultParallel = 4;
         var value = args.GetValueOrDefault("parallel");
         if (value is null)
         {
-            return DefaultParallel;
+            return defaultValue;
         }
         if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) || parsed <= 0)
         {
-            return DefaultParallel;
+            return defaultValue;
         }
         return parsed;
     }

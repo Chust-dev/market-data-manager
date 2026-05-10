@@ -32,7 +32,8 @@ internal sealed record CacheDiscoverOptions(
             Instrument: CommonParsingHelpers.ParseInstrument(args),
             Instruments: CommonParsingHelpers.ParseInstruments(args),
             Since: CommonParsingHelpers.ParseSince(args),
-            Parallel: CommonParsingHelpers.ParseParallel(args),
+            // Discover does a per-symbol binary search — 4 concurrent is plenty.
+            Parallel: CommonParsingHelpers.ParseParallel(args, defaultValue: 4),
             RefreshDiscovery: CommonParsingHelpers.ParseRefreshDiscovery(args),
             OutputPath: args.TryGetValue("output", out var o) && !string.IsNullOrWhiteSpace(o) ? o : null,
             PoolPath: CommonParsingHelpers.ParsePoolPath(args),
