@@ -248,6 +248,7 @@ public static class Program
             ("cache", "discover") => new CacheDiscoverCommand(),
             ("cache", "verify") => new CacheVerifyCommand(),
             ("cache", "repair") => new CacheRepairCommand(),
+            ("cache", "cleanup") => new CacheCleanupCommand(),
             ("export", "bars") => new ExportBarsCommand(),
             ("export", "ticks") => new ExportTicksCommand(),
             _ => null
@@ -389,6 +390,69 @@ public static class Program
         return report.ProblemsFound == 0 || report.AllResolved ? 0 : 1;
     }
 
+    /// <summary>
+    /// Drives the cleanup flow for `cache cleanup`. Destructive by default —
+    /// the user has to pass <c>--dry-run</c> to preview without deleting. We
+    /// print a clear warning banner before doing real work so a typo'd
+    /// invocation is at least loud about it.
+    /// </summary>
+    internal static int RunCleanup(CacheCleanupOptions options)
+    {
+        var poolPath = PathUtils.NormalizePath(options.PoolPath);
+
+        if (!Directory.Exists(poolPath))
+        {
+            Console.WriteLine($"Pool path does not exist: {poolPath}");
+            return 1;
+        }
+
+        var cleaner = new CacheCleaner(poolPath);
+        var plan = cleaner.PlanCleanup(options.InstrumentFilter);
+
+        if (plan.Count == 0)
+        {
+            Console.WriteLine($"Nothing to clean up in {poolPath}");
+            return 0;
+        }
+
+        if (!options.Quiet)
+        {
+            if (options.DryRun)
+            {
+                Console.WriteLine($"Dry-run: planning cleanup of {plan.Count:N0} file(s) in {poolPath}...");
+            }
+            else
+            {
+                Console.WriteLine($"WARNING: about to DELETE {plan.Count:N0} file(s) from {poolPath}.");
+                Console.WriteLine("         (Pass --dry-run to preview without deleting.)");
+            }
+        }
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
+        CacheCleanupReport report;
+        try
+        {
+            using var pb = new ProgressBar("Cleanup", plan.Count, () => cleaner.FilesProcessed, options.Quiet);
+            report = cleaner.RunPlan(plan, options.DryRun, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Cleanup cancelled.");
+            return 1;
+        }
+
+        Console.WriteLine();
+        Console.Write(report.Render());
+        return report.AnyFailures ? 1 : 0;
+    }
+
     private static void PrintHelp()
     {
         Console.WriteLine("Dukascopy Historical Tick Downloader");
@@ -406,6 +470,8 @@ public static class Program
         Console.WriteLine("                 Recompute SHA-256 on cached .bi5 files; flag drift vs sidecar metadata.");
         Console.WriteLine("  cache repair   [--instrument SYM] [--dry-run] [--trust-existing] [--quiet]");
         Console.WriteLine("                 Auto-fix files flagged by verify (refetch from Dukascopy or regenerate sidecar).");
+        Console.WriteLine("  cache cleanup  [--instrument SYM] [--dry-run] [--quiet]");
+        Console.WriteLine("                 DELETES zero-byte .bi5, orphan .meta.json, and .tmp files. Use --dry-run first.");
         Console.WriteLine("  export bars    --instrument SYM --start ISO --end ISO --timeframe TF [--format csv|csv+hst]");
         Console.WriteLine("                 Read cache (offline), write MT5 bar CSV/HST.");
         Console.WriteLine("  export ticks   --instrument SYM --start ISO --end ISO");

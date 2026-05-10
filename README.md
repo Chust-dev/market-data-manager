@@ -25,6 +25,7 @@ HistoricalData cache discover [--instrument EURUSD | --symbols all] [--since 200
 HistoricalData cache audit    [--instrument EURUSD]
 HistoricalData cache verify   [--instrument EURUSD] [--quiet]
 HistoricalData cache repair   [--instrument EURUSD] [--dry-run] [--trust-existing] [--quiet]
+HistoricalData cache cleanup  [--instrument EURUSD] [--dry-run] [--quiet]
 HistoricalData export bars    --instrument EURUSD --start ... --end ... --timeframe m1
 HistoricalData export ticks   --instrument EURUSD --start ... --end ...
 ```
@@ -39,7 +40,9 @@ bound. `cache audit` reports on the pool's shape (no network).
 `cache verify` recomputes SHA-256 on every cached file and flags drift
 versus the sidecar metadata written at download time (no network).
 `cache repair` consumes verify's output and surgically re-downloads
-problem files (or regenerates missing sidecars).
+problem files (or regenerates missing sidecars). `cache cleanup` is the
+destructive last resort — removes zero-byte downloads, orphan sidecars,
+and leftover `.tmp` files; **deletes by default, preview with `--dry-run`**.
 `export bars` and `export ticks` are offline operations that read
 from the pool and produce MT5-compatible files; they never reach
 Dukascopy. Run `--help` for the full subcommand reference.
@@ -393,6 +396,44 @@ Exit code: `0` if the pool was already clean or every problem was
 resolved, `1` if any file is still bad after the run (or the run was
 cancelled). A successful `cache repair --dry-run` always exits `0` — it's
 informational.
+
+## Cleaning up the cache
+
+`cache cleanup` removes files from the pool that are definitively useless:
+
+- **Zero-byte `.bi5` files** — failed/interrupted downloads. `cache update`
+  will refetch them next time it sees the missing date in its window.
+- **Orphan `.meta.json` sidecars** — sidecar present, matching `.bi5` gone.
+  Nothing references them.
+- **Leftover `.tmp` files** — partial downloads from interrupted runs.
+  `cache update` already cleans these on startup (Session A); cleanup
+  catches the ones that accumulated when you ran other subcommands instead.
+
+After deletion, `cache cleanup` prunes empty day / month / year folders so
+the tree stays tidy. The symbol root itself is preserved even if empty —
+deleting symbol directories is too aggressive a decision for cleanup.
+
+> ⚠️ **Cleanup deletes by default.** Always run with `--dry-run` first
+> on an unfamiliar pool:
+>
+> ```text
+> dotnet run --project src/ConsoleApp/HistoricalData.csproj -- cache cleanup --dry-run
+> ```
+>
+> Without `--dry-run`, the listed files are deleted immediately. There is
+> no recycle bin and no confirmation prompt.
+
+What `cache cleanup` deliberately does **not** remove:
+
+- Hash-mismatched `.bi5` files. That's `cache repair`'s job (refetch). If
+  repair gave up, the file might be wanted next time the source recovers
+  — cleanup won't remove it for you.
+- Files for symbols not in `instruments.json`. The user might be tracking
+  them deliberately.
+
+Filters: `--instrument` / `--symbols` to scope to one symbol or a list.
+`--quiet` silences the progress bar. Exit code `0` on a successful run
+(including dry-run); `1` if any deletion threw or the run was cancelled.
 
 ## Data Pool Structure
 
