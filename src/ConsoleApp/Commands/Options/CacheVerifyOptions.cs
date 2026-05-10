@@ -28,6 +28,8 @@ internal sealed record CacheVerifyOptions(
     bool Remote,
     bool SizeOnly,
     int Parallel,
+    DateTimeOffset? StartUtc,
+    DateTimeOffset? EndUtc,
     bool Quiet)
 {
     public static CacheVerifyOptions FromArgs(IReadOnlyDictionary<string, string> args) =>
@@ -37,5 +39,7 @@ internal sealed record CacheVerifyOptions(
             Remote: CommonParsingHelpers.ParseRemote(args),
             SizeOnly: CommonParsingHelpers.ParseSizeOnly(args),
             Parallel: CommonParsingHelpers.ParseParallel(args),
+            StartUtc: CommonParsingHelpers.ParseStartUtcOptional(args),
+            EndUtc: CommonParsingHelpers.ParseEndUtcOptional(args),
             Quiet: CommonParsingHelpers.ParseQuiet(args));
 }

@@ -51,7 +51,21 @@ public sealed class CacheVerifier
     /// Pass 1: walk the pool and collect all .bi5 files matching the filter.
     /// Tagged with the symbol so the report can group results.
     /// </summary>
-    public IReadOnlyList<VerifyTarget> PlanFiles(IReadOnlyCollection<string>? symbolFilter = null)
+    public IReadOnlyList<VerifyTarget> PlanFiles(IReadOnlyCollection<string>? symbolFilter = null) =>
+        PlanFiles(symbolFilter, fromUtc: null, toUtc: null);
+
+    /// <summary>
+    /// Same as the simpler overload, but additionally restricts the plan to
+    /// files whose (year, calendar-month, day) is within
+    /// <c>[fromUtc, toUtc]</c> inclusive. Either bound may be <c>null</c> to
+    /// leave that side open. Used to scope verify runs to a date range when
+    /// checking the full pool would be impractical — typically by
+    /// <c>cache verify --start ... --end ...</c>.
+    /// </summary>
+    public IReadOnlyList<VerifyTarget> PlanFiles(
+        IReadOnlyCollection<string>? symbolFilter,
+        DateTimeOffset? fromUtc,
+        DateTimeOffset? toUtc)
     {
         var plan = new List<VerifyTarget>();
         if (!Directory.Exists(_poolPath))
@@ -63,6 +77,11 @@ public sealed class CacheVerifier
             ? null
             : new HashSet<string>(symbolFilter, StringComparer.OrdinalIgnoreCase);
 
+        // Normalise both bounds to day-precision so we can cheaply skip whole
+        // year/month/day folders without inspecting their files.
+        DateTime? fromDay = fromUtc?.UtcDateTime.Date;
+        DateTime? toDay = toUtc?.UtcDateTime.Date;
+
         foreach (var symbolDir in Directory.EnumerateDirectories(_poolPath).OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
         {
             var symbol = Path.GetFileName(symbolDir);
@@ -73,24 +92,57 @@ public sealed class CacheVerifier
 
             foreach (var yearDir in Directory.EnumerateDirectories(symbolDir))
             {
-                if (!int.TryParse(Path.GetFileName(yearDir), NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+                if (!int.TryParse(Path.GetFileName(yearDir), NumberStyles.Integer, CultureInfo.InvariantCulture, out var year))
                 {
                     continue;
                 }
+                if (fromDay is { } fd && year < fd.Year) continue; // year predates lower bound
+                if (toDay   is { } td && year > td.Year) continue; // year postdates upper bound
 
                 foreach (var monthDir in Directory.EnumerateDirectories(yearDir))
                 {
-                    if (!int.TryParse(Path.GetFileName(monthDir), NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+                    if (!int.TryParse(Path.GetFileName(monthDir), NumberStyles.Integer, CultureInfo.InvariantCulture, out var dukaMonth))
+                    {
+                        continue;
+                    }
+
+                    // Dukascopy's URL convention is 0-indexed months; map to calendar
+                    // month for the date comparison.
+                    var calMonth = dukaMonth + 1;
+                    if (calMonth is < 1 or > 12)
+                    {
+                        continue;
+                    }
+                    if (fromDay is { } fm
+                        && (year < fm.Year || (year == fm.Year && calMonth < fm.Month)))
+                    {
+                        continue;
+                    }
+                    if (toDay is { } tm
+                        && (year > tm.Year || (year == tm.Year && calMonth > tm.Month)))
                     {
                         continue;
                     }
 
                     foreach (var dayDir in Directory.EnumerateDirectories(monthDir))
                     {
-                        if (!int.TryParse(Path.GetFileName(dayDir), NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+                        if (!int.TryParse(Path.GetFileName(dayDir), NumberStyles.Integer, CultureInfo.InvariantCulture, out var day))
                         {
                             continue;
                         }
+
+                        DateTime dayDate;
+                        try
+                        {
+                            dayDate = new DateTime(year, calMonth, day);
+                        }
+                        catch (ArgumentOutOfRangeException)
+                        {
+                            continue; // malformed date — skip
+                        }
+
+                        if (fromDay is { } fd2 && dayDate < fd2) continue;
+                        if (toDay   is { } td2 && dayDate > td2) continue;
 
                         foreach (var file in Directory.EnumerateFiles(dayDir, "*" + Bi5Suffix))
                         {
@@ -130,11 +182,14 @@ public sealed class CacheVerifier
     /// </summary>
     /// <summary>
     /// Default per-symbol probe concurrency for `cache verify --remote`.
-    /// Matches <c>cache discover</c>'s default — empirically tolerated by
-    /// Dukascopy without rate-limiting and well within a typical home
-    /// connection's saturation point.
+    /// Slightly more aggressive than <c>cache discover</c>'s 4 because
+    /// drift checks fan out across way more files (tens of thousands per
+    /// symbol vs a single binary search), and 8 stays comfortably under
+    /// Dukascopy's tolerated concurrency in our testing. Raise via
+    /// <c>--parallel N</c> if your network can sustain it; dial back if
+    /// you start seeing clusters of <c>RemoteUnreachable</c> in the report.
     /// </summary>
-    public const int DefaultRemoteParallelism = 4;
+    public const int DefaultRemoteParallelism = 8;
 
     public Task<CacheVerifyReport> RunPlanWithRemoteAsync(
         IReadOnlyList<VerifyTarget> plan,

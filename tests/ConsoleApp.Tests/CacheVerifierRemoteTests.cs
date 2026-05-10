@@ -358,7 +358,7 @@ public sealed class CacheVerifierRemoteTests : IDisposable
     }
 
     [Fact]
-    public async Task Remote_ParallelDefaultsToFour()
+    public async Task Remote_ParallelDefaultsToConst()
     {
         CreateTickFile("EURUSD", 10, new byte[] { 1, 2, 3, 4 });
 
@@ -369,6 +369,6 @@ public sealed class CacheVerifierRemoteTests : IDisposable
         var report = await verifier.RunPlanWithRemoteAsync(plan, probe, byteExact: false);
 
         Assert.Equal(CacheVerifier.DefaultRemoteParallelism, report.RemoteParallelism);
-        Assert.Equal(4, report.RemoteParallelism); // sanity: default is 4
+        Assert.Equal(8, report.RemoteParallelism); // sanity: default is 8
     }
 }

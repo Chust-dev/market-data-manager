@@ -154,6 +154,34 @@ internal static class CommonParsingHelpers
         args.ContainsKey("size-only");
 
     /// <summary>
+    /// `--start ISO` as a nullable UTC date — null when the flag is absent
+    /// or unparseable. Differs from <see cref="ParseStartEnd"/>, which
+    /// always returns a value (defaulted from <see cref="AppOptions"/>).
+    /// Used by `cache verify` to scope the run to a date range without
+    /// requiring both bounds to be present.
+    /// </summary>
+    public static DateTimeOffset? ParseStartUtcOptional(IReadOnlyDictionary<string, string> args)
+    {
+        var value = args.GetValueOrDefault("start");
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    /// <summary>
+    /// `--end ISO` as a nullable UTC date — null when absent or unparseable.
+    /// </summary>
+    public static DateTimeOffset? ParseEndUtcOptional(IReadOnlyDictionary<string, string> args)
+    {
+        var value = args.GetValueOrDefault("end");
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    /// <summary>
     /// `--by-year` for `cache audit`. Adds a year-level coverage grid (rows
     /// = symbols, columns = years observed) to the audit report.
     /// </summary>

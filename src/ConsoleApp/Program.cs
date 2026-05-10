@@ -296,10 +296,17 @@ public static class Program
             return 1;
         }
 
-        var plan = verifier.PlanFiles(options.InstrumentFilter);
+        var plan = verifier.PlanFiles(options.InstrumentFilter, options.StartUtc, options.EndUtc);
         if (plan.Count == 0)
         {
-            Console.WriteLine($"No .bi5 files to verify in {poolPath}");
+            var scopeLabel = (options.StartUtc, options.EndUtc) switch
+            {
+                (null, null) => "",
+                (var s, null) => $" since {s:yyyy-MM-dd}",
+                (null, var e) => $" up to {e:yyyy-MM-dd}",
+                (var s, var e) => $" between {s:yyyy-MM-dd} and {e:yyyy-MM-dd}"
+            };
+            Console.WriteLine($"No .bi5 files to verify in {poolPath}{scopeLabel}");
             return 0;
         }
 
@@ -312,14 +319,21 @@ public static class Program
 
         if (!options.Quiet)
         {
+            var scopeLabel = (options.StartUtc, options.EndUtc) switch
+            {
+                (null, null) => "",
+                (var s, null) => $" since {s:yyyy-MM-dd}",
+                (null, var e) => $" up to {e:yyyy-MM-dd}",
+                (var s, var e) => $" between {s:yyyy-MM-dd} and {e:yyyy-MM-dd}"
+            };
             if (options.Remote)
             {
                 var mode = options.SizeOnly ? "size-only" : "byte-exact";
-                Console.WriteLine($"Verifying {plan.Count:N0} cached file(s) in {poolPath} (local + remote drift, {mode}, parallel={options.Parallel})...");
+                Console.WriteLine($"Verifying {plan.Count:N0} cached file(s) in {poolPath}{scopeLabel} (local + remote drift, {mode}, parallel={options.Parallel})...");
             }
             else
             {
-                Console.WriteLine($"Verifying {plan.Count:N0} cached file(s) in {poolPath}...");
+                Console.WriteLine($"Verifying {plan.Count:N0} cached file(s) in {poolPath}{scopeLabel}...");
             }
         }
 
@@ -498,9 +512,10 @@ public static class Program
         Console.WriteLine("  cache audit    [--instrument SYM] [--by-year] [--by-month | --no-by-month]");
         Console.WriteLine("                 Inspect the cache: file counts, coverage, disk usage.");
         Console.WriteLine("                 --by-year / --by-month add finer-grained coverage grids; month is auto-included for single-symbol audits.");
-        Console.WriteLine("  cache verify   [--instrument SYM] [--remote [--size-only] [--parallel N]] [--quiet]");
+        Console.WriteLine("  cache verify   [--instrument SYM] [--start ISO] [--end ISO]");
+        Console.WriteLine("                 [--remote [--size-only] [--parallel N]] [--quiet]");
         Console.WriteLine("                 Recompute SHA-256 vs sidecar (local) and optionally probe Dukascopy for drift.");
-        Console.WriteLine("                 --parallel defaults to 4 concurrent probes; raise carefully (Dukascopy may rate-limit).");
+        Console.WriteLine("                 --start/--end scope to a date range (day precision). --parallel defaults to 8 concurrent probes.");
         Console.WriteLine("  cache repair   [--instrument SYM] [--dry-run] [--trust-existing] [--quiet]");
         Console.WriteLine("                 Auto-fix files flagged by verify (refetch from Dukascopy or regenerate sidecar).");
         Console.WriteLine("  cache cleanup  [--instrument SYM] [--dry-run] [--quiet]");

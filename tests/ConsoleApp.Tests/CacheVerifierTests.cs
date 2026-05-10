@@ -204,4 +204,90 @@ public sealed class CacheVerifierTests : IDisposable
         // Now points users at the dedicated repair / cleanup tools.
         Assert.Contains("cache repair", rendered);
     }
+
+    // ---------- Date range filter (cache verify --start / --end) ----------
+
+    [Fact]
+    public void PlanFiles_FromUtc_ExcludesEarlierDays()
+    {
+        // Three files: 2024-01, 2024-06, 2025-03 (all dukaMonth values).
+        CreateTickFile("EURUSD", 2024, 0, 15, 10, new byte[] { 1 });   // 2024-01-15
+        CreateTickFile("EURUSD", 2024, 5, 15, 10, new byte[] { 2 });   // 2024-06-15
+        CreateTickFile("EURUSD", 2025, 2, 15, 10, new byte[] { 3 });   // 2025-03-15
+
+        var verifier = new CacheVerifier(_root);
+        // From 2025-01-01: only the 2025-03 file should remain.
+        var plan = verifier.PlanFiles(
+            symbolFilter: null,
+            fromUtc: new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            toUtc: null);
+
+        Assert.Single(plan);
+        Assert.Contains("2025", plan[0].Path);
+    }
+
+    [Fact]
+    public void PlanFiles_ToUtc_ExcludesLaterDays()
+    {
+        CreateTickFile("EURUSD", 2024, 0, 15, 10, new byte[] { 1 });   // 2024-01-15
+        CreateTickFile("EURUSD", 2024, 5, 15, 10, new byte[] { 2 });   // 2024-06-15
+        CreateTickFile("EURUSD", 2025, 2, 15, 10, new byte[] { 3 });   // 2025-03-15
+
+        var verifier = new CacheVerifier(_root);
+        // Up to 2024-12-31: the first two files only.
+        var plan = verifier.PlanFiles(
+            symbolFilter: null,
+            fromUtc: null,
+            toUtc: new DateTimeOffset(2024, 12, 31, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(2, plan.Count);
+        Assert.All(plan, t => Assert.Contains("2024", t.Path));
+    }
+
+    [Fact]
+    public void PlanFiles_BothBounds_NarrowsToRange()
+    {
+        CreateTickFile("EURUSD", 2024, 0, 15, 10, new byte[] { 1 });   // 2024-01-15
+        CreateTickFile("EURUSD", 2024, 5, 15, 10, new byte[] { 2 });   // 2024-06-15
+        CreateTickFile("EURUSD", 2025, 2, 15, 10, new byte[] { 3 });   // 2025-03-15
+
+        var verifier = new CacheVerifier(_root);
+        // Between 2024-03-01 and 2024-09-30: only the 2024-06 file.
+        var plan = verifier.PlanFiles(
+            symbolFilter: null,
+            fromUtc: new DateTimeOffset(2024, 3, 1, 0, 0, 0, TimeSpan.Zero),
+            toUtc:   new DateTimeOffset(2024, 9, 30, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Single(plan);
+        // 2024-06 cached under dukaMonth folder "05".
+        Assert.Contains(Path.Combine("2024", "05"), plan[0].Path);
+    }
+
+    [Fact]
+    public void PlanFiles_EmptyRange_ReturnsNothing()
+    {
+        CreateTickFile("EURUSD", 2024, 0, 15, 10, new byte[] { 1 });
+
+        var verifier = new CacheVerifier(_root);
+        // Range entirely after the only file.
+        var plan = verifier.PlanFiles(
+            symbolFilter: null,
+            fromUtc: new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            toUtc:   new DateTimeOffset(2030, 12, 31, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Empty(plan);
+    }
+
+    [Fact]
+    public void PlanFiles_NullBounds_ReturnsEverything()
+    {
+        CreateTickFile("EURUSD", 2024, 0, 15, 10, new byte[] { 1 });
+        CreateTickFile("EURUSD", 2025, 2, 15, 10, new byte[] { 2 });
+
+        var verifier = new CacheVerifier(_root);
+        // null/null == no date filtering.
+        var plan = verifier.PlanFiles(symbolFilter: null, fromUtc: null, toUtc: null);
+
+        Assert.Equal(2, plan.Count);
+    }
 }
