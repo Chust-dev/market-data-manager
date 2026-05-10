@@ -23,6 +23,7 @@ HistoricalData cache update   --instrument EURUSD --start ... --end ...
 HistoricalData cache catchup  [--instrument EURUSD | --symbols all] [--window 60]
 HistoricalData cache discover [--instrument EURUSD | --symbols all] [--since 2000-01-01]
 HistoricalData cache audit    [--instrument EURUSD]
+HistoricalData cache verify   [--instrument EURUSD] [--quiet]
 HistoricalData export bars    --instrument EURUSD --start ... --end ... --timeframe m1
 HistoricalData export ticks   --instrument EURUSD --start ... --end ...
 ```
@@ -34,6 +35,8 @@ maintenance. `cache discover` binary-searches Dukascopy to find the
 earliest available date per symbol and records it in
 `instruments.json` so other commands can use it as a sensible lower
 bound. `cache audit` reports on the pool's shape (no network).
+`cache verify` recomputes SHA-256 on every cached file and flags drift
+versus the sidecar metadata written at download time (no network).
 `export bars` and `export ticks` are offline operations that read
 from the pool and produce MT5-compatible files; they never reach
 Dukascopy. Run `--help` for the full subcommand reference.
@@ -310,6 +313,42 @@ weekday hours between `FirstHour` and `LastHour`. ~95–100% is healthy for a
 recently completed download; anything significantly lower suggests gaps to
 re-fetch (a re-run with the same `--start`/`--end` will fill them). Audit is
 fast (seconds) because it does not decompress the `.bi5` files.
+
+## Verifying the cache
+
+`cache audit` is a fast structural check. To prove that no cached file has
+silently corrupted (bad sectors, interrupted write, accidental edit), run:
+
+```text
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- cache verify
+```
+
+`cache verify` recomputes the SHA-256 of every `.bi5` file in the pool and
+compares against the `<file>.bi5.meta.json` sidecar that was written at
+download time (containing the file's recorded SHA-256, byte count, and
+download timestamp). It runs entirely offline — no Dukascopy traffic.
+
+Outcomes per file:
+
+- **Ok** — sidecar present, size matches, SHA-256 matches.
+- **No metadata** — sidecar `.meta.json` is missing. Most likely: file was
+  cached by an older build before sidecars were added, or the sidecar was
+  manually deleted. Re-run `cache update` to rewrite both.
+- **Size mismatch** — file size disagrees with the sidecar. Strong signal
+  of corruption or partial write.
+- **Hash mismatch** — size matches but content differs. Disk-level rot or
+  in-place edit.
+- **I/O error** — file couldn't be read. Permissions or hardware fault.
+
+Filter with `--instrument SYMBOL` or `--symbols SYM1,SYM2`. Use `--quiet`
+to silence the progress bar (useful for scheduled jobs that just need the
+exit code: 0 = clean, 1 = problems found or run cancelled).
+
+Verification rehashes every file, so it's CPU-bound and slow on full
+pools — expect a few minutes per GB on typical hardware. Press `Ctrl+C`
+to cancel mid-run; partial results are not saved. To remediate problems,
+delete the affected files (and their `.meta.json` sidecars) and re-run
+`cache update` to refetch.
 
 ## Data Pool Structure
 

@@ -246,6 +246,7 @@ public static class Program
             ("cache", "update") => new CacheUpdateCommand(),
             ("cache", "catchup") => new CacheCatchupCommand(),
             ("cache", "discover") => new CacheDiscoverCommand(),
+            ("cache", "verify") => new CacheVerifyCommand(),
             ("export", "bars") => new ExportBarsCommand(),
             ("export", "ticks") => new ExportTicksCommand(),
             _ => null
@@ -261,6 +262,62 @@ public static class Program
         return report.PoolExists ? 0 : 1;
     }
 
+    /// <summary>
+    /// Drives the offline checksum verification flow for `cache verify`.
+    /// Two phases: <see cref="CacheVerifier.PlanFiles"/> enumerates targets
+    /// (so the progress bar can know the total upfront), then
+    /// <see cref="CacheVerifier.RunPlan"/> does the SHA-256 work while the
+    /// bar polls <see cref="CacheVerifier.FilesProcessed"/>. Returns 0 on a
+    /// clean pool, 1 if any problem is found or the run is cancelled.
+    /// </summary>
+    internal static int RunVerify(CacheVerifyOptions options)
+    {
+        var poolPath = PathUtils.NormalizePath(options.PoolPath);
+        var verifier = new CacheVerifier(poolPath);
+
+        if (!Directory.Exists(poolPath))
+        {
+            Console.WriteLine($"Pool path does not exist: {poolPath}");
+            return 1;
+        }
+
+        var plan = verifier.PlanFiles(options.InstrumentFilter);
+        if (plan.Count == 0)
+        {
+            Console.WriteLine($"No .bi5 files to verify in {poolPath}");
+            return 0;
+        }
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
+        if (!options.Quiet)
+        {
+            Console.WriteLine($"Verifying {plan.Count:N0} cached file(s) in {poolPath}...");
+        }
+
+        CacheVerifyReport report;
+        try
+        {
+            using var pb = new ProgressBar("Verify", plan.Count, () => verifier.FilesProcessed, options.Quiet);
+            report = verifier.RunPlan(plan, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Verification cancelled.");
+            return 1;
+        }
+
+        Console.WriteLine();
+        Console.Write(report.Render());
+        return report.AllClean ? 0 : 1;
+    }
+
     private static void PrintHelp()
     {
         Console.WriteLine("Dukascopy Historical Tick Downloader");
@@ -274,6 +331,8 @@ public static class Program
         Console.WriteLine("                 Find earliest available date per symbol on Dukascopy; record into instruments.json.");
         Console.WriteLine("  cache audit    [--instrument SYM]");
         Console.WriteLine("                 Inspect the cache: file counts, coverage, disk usage.");
+        Console.WriteLine("  cache verify   [--instrument SYM] [--quiet]");
+        Console.WriteLine("                 Recompute SHA-256 on cached .bi5 files; flag drift vs sidecar metadata.");
         Console.WriteLine("  export bars    --instrument SYM --start ISO --end ISO --timeframe TF [--format csv|csv+hst]");
         Console.WriteLine("                 Read cache (offline), write MT5 bar CSV/HST.");
         Console.WriteLine("  export ticks   --instrument SYM --start ISO --end ISO");

@@ -26,7 +26,7 @@ re-downloading everything.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 12 | `cache verify` — local checksum verification | pending | walk pool, recompute checksums, flag mismatches |
+| 12 | `cache verify` — local checksum verification | done | SHA-256 vs `.bi5.meta.json` sidecar; per-symbol report; ProgressBar wired |
 | 13 | `cache verify --remote` — drift verification against Dukascopy | pending | compare file sizes / hashes against source |
 | 14 | Coverage report per month / per year | pending | extends `cache audit`; finer-grained holes report |
 | 20 | `cache repair` — auto-fix corrupt files | pending | re-download zero-byte / failed-checksum files only |

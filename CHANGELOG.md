@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Session B — Manage pillar build-out
+
+- Added `cache verify` subcommand (BACKLOG #12): recomputes SHA-256 on every cached `.bi5` file and compares against the `<file>.bi5.meta.json` sidecar written at download time. Reports per-symbol and aggregate counts of Ok / NoMetadata / SizeMismatch / HashMismatch / IoError outcomes, plus a capped detail list of the first 100 problematic files. Pure offline — no Dukascopy traffic. Honours `--instrument` / `--symbols` filters and `--quiet`. Wired into the cross-pillar `ProgressBar` (two-phase API: `PlanFiles` enumerates upfront so the bar knows the total, `RunPlan` does the SHA-256 work while polling the verifier's `FilesProcessed` counter). Exit code 0 if every cached file verifies clean, 1 otherwise — suitable for scheduled drift detection. `Ctrl+C` cancels mid-run.
+
 ### Known issues (parked from Session A)
 
 - `cache discover` conflates clean "not available" responses with transient HTTP errors and writes both as `null` in `instruments.json`. The idempotent skip filter then permanently treats the symbol as unavailable until `--refresh` is passed. Workaround: re-run with `--refresh`. Fix planned post-Session-A.
