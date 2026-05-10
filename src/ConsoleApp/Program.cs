@@ -315,7 +315,7 @@ public static class Program
             if (options.Remote)
             {
                 var mode = options.SizeOnly ? "size-only" : "byte-exact";
-                Console.WriteLine($"Verifying {plan.Count:N0} cached file(s) in {poolPath} (local + remote drift, {mode})...");
+                Console.WriteLine($"Verifying {plan.Count:N0} cached file(s) in {poolPath} (local + remote drift, {mode}, parallel={options.Parallel})...");
             }
             else
             {
@@ -332,7 +332,7 @@ public static class Program
                 var httpConfig = HttpConfig.Load(AppOptions.Defaults.HttpConfigPath);
                 var client = new DukascopyClient(httpConfig, poolPath, verbose: false);
                 var probe = new HistoricalData.Download.DukascopyRemoteFileProbe(client);
-                report = await verifier.RunPlanWithRemoteAsync(plan, probe, byteExact: !options.SizeOnly, cts.Token);
+                report = await verifier.RunPlanWithRemoteAsync(plan, probe, byteExact: !options.SizeOnly, parallelism: options.Parallel, cts.Token);
             }
             else
             {
@@ -498,8 +498,9 @@ public static class Program
         Console.WriteLine("  cache audit    [--instrument SYM] [--by-year] [--by-month | --no-by-month]");
         Console.WriteLine("                 Inspect the cache: file counts, coverage, disk usage.");
         Console.WriteLine("                 --by-year / --by-month add finer-grained coverage grids; month is auto-included for single-symbol audits.");
-        Console.WriteLine("  cache verify   [--instrument SYM] [--remote [--size-only]] [--quiet]");
+        Console.WriteLine("  cache verify   [--instrument SYM] [--remote [--size-only] [--parallel N]] [--quiet]");
         Console.WriteLine("                 Recompute SHA-256 vs sidecar (local) and optionally probe Dukascopy for drift.");
+        Console.WriteLine("                 --parallel defaults to 4 concurrent probes; raise carefully (Dukascopy may rate-limit).");
         Console.WriteLine("  cache repair   [--instrument SYM] [--dry-run] [--trust-existing] [--quiet]");
         Console.WriteLine("                 Auto-fix files flagged by verify (refetch from Dukascopy or regenerate sidecar).");
         Console.WriteLine("  cache cleanup  [--instrument SYM] [--dry-run] [--quiet]");

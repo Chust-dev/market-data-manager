@@ -12,6 +12,12 @@ namespace HistoricalData.Commands.Options;
 /// set: it falls back to a Content-Length compare (no body download)
 /// instead of the default byte-exact hash. Faster, less safe.
 ///
+/// <see cref="Parallel"/> controls the concurrency of remote probes.
+/// Default 4 (matches <c>cache discover</c>). Sequential probing is
+/// impractical for full-pool drift checks — a 50k-file symbol takes
+/// hours at parallel=1 — so the default is the right balance for
+/// typical Dukascopy + home-connection conditions.
+///
 /// <see cref="InstrumentFilter"/> is null when no filter was passed —
 /// meaning verify every symbol in the pool. Otherwise it's the explicit
 /// list from <c>--instrument</c> or <c>--symbols</c>.
@@ -21,6 +27,7 @@ internal sealed record CacheVerifyOptions(
     string PoolPath,
     bool Remote,
     bool SizeOnly,
+    int Parallel,
     bool Quiet)
 {
     public static CacheVerifyOptions FromArgs(IReadOnlyDictionary<string, string> args) =>
@@ -29,5 +36,6 @@ internal sealed record CacheVerifyOptions(
             PoolPath: CommonParsingHelpers.ParsePoolPath(args),
             Remote: CommonParsingHelpers.ParseRemote(args),
             SizeOnly: CommonParsingHelpers.ParseSizeOnly(args),
+            Parallel: CommonParsingHelpers.ParseParallel(args),
             Quiet: CommonParsingHelpers.ParseQuiet(args));
 }

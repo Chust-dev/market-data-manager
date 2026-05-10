@@ -23,7 +23,7 @@ HistoricalData cache update   --instrument EURUSD --start ... --end ...
 HistoricalData cache catchup  [--instrument EURUSD | --symbols all] [--window 60]
 HistoricalData cache discover [--instrument EURUSD | --symbols all] [--since 2000-01-01]
 HistoricalData cache audit    [--instrument EURUSD] [--by-year] [--by-month | --no-by-month]
-HistoricalData cache verify   [--instrument EURUSD] [--remote [--size-only]] [--quiet]
+HistoricalData cache verify   [--instrument EURUSD] [--remote [--size-only] [--parallel N]] [--quiet]
 HistoricalData cache repair   [--instrument EURUSD] [--dry-run] [--trust-existing] [--quiet]
 HistoricalData cache cleanup  [--instrument EURUSD] [--dry-run] [--quiet]
 HistoricalData export bars    --instrument EURUSD --start ... --end ... --timeframe m1
@@ -437,6 +437,13 @@ same-length content changes.
 |---|---|---|
 | `--remote` (default = byte-exact) | re-downloads the pool, ~hours per GB | all drift |
 | `--remote --size-only` | one HEAD-equivalent per file, ~minutes per pool | most drift; misses same-size content changes |
+
+Probes are fanned out across **4 concurrent tasks by default**, matching
+`cache discover`'s tolerated concurrency. Override with `--parallel N`.
+Sequential probing (`--parallel 1`) is impractical for full-pool checks —
+a 50k-file symbol takes hours at concurrency 1. Raising `--parallel`
+beyond 8 risks Dukascopy rate-limiting; if you start seeing
+`RemoteUnreachable` cluster in the report, dial it back.
 
 Files that fail the local check are **not** probed remotely — there's no
 point burning network on a file we already know is bad. Locally-bad files

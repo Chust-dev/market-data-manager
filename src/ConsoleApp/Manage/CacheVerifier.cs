@@ -111,7 +111,7 @@ public sealed class CacheVerifier
     /// </summary>
     public CacheVerifyReport RunPlan(IReadOnlyList<VerifyTarget> plan, CancellationToken cancellationToken = default)
     {
-        return RunPlanInternal(plan, remoteProbe: null, byteExact: false, cancellationToken)
+        return RunPlanInternal(plan, remoteProbe: null, byteExact: false, parallelism: 1, cancellationToken)
             .GetAwaiter()
             .GetResult();
     }
@@ -128,20 +128,47 @@ public sealed class CacheVerifier
     /// for byte-exact compare; false fetches only Content-Length for a fast
     /// size-only check.
     /// </summary>
+    /// <summary>
+    /// Default per-symbol probe concurrency for `cache verify --remote`.
+    /// Matches <c>cache discover</c>'s default — empirically tolerated by
+    /// Dukascopy without rate-limiting and well within a typical home
+    /// connection's saturation point.
+    /// </summary>
+    public const int DefaultRemoteParallelism = 4;
+
     public Task<CacheVerifyReport> RunPlanWithRemoteAsync(
         IReadOnlyList<VerifyTarget> plan,
         IRemoteFileProbe remoteProbe,
         bool byteExact,
         CancellationToken cancellationToken = default)
     {
+        return RunPlanWithRemoteAsync(plan, remoteProbe, byteExact, DefaultRemoteParallelism, cancellationToken);
+    }
+
+    /// <summary>
+    /// Same as the simpler overload but with explicit per-file concurrency.
+    /// <paramref name="parallelism"/>=1 forces sequential probing; higher
+    /// values fan out remote checks across that many concurrent tasks.
+    /// Local Inspect is still sequential (CPU-bound, not the bottleneck);
+    /// only the network probe runs in parallel.
+    /// </summary>
+    public Task<CacheVerifyReport> RunPlanWithRemoteAsync(
+        IReadOnlyList<VerifyTarget> plan,
+        IRemoteFileProbe remoteProbe,
+        bool byteExact,
+        int parallelism,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(remoteProbe);
-        return RunPlanInternal(plan, remoteProbe, byteExact, cancellationToken);
+        if (parallelism < 1) parallelism = 1;
+        return RunPlanInternal(plan, remoteProbe, byteExact, parallelism, cancellationToken);
     }
 
     private async Task<CacheVerifyReport> RunPlanInternal(
         IReadOnlyList<VerifyTarget> plan,
         IRemoteFileProbe? remoteProbe,
         bool byteExact,
+        int parallelism,
         CancellationToken cancellationToken)
     {
         Interlocked.Exchange(ref _filesProcessed, 0);
@@ -152,35 +179,84 @@ public sealed class CacheVerifier
             PoolExists = Directory.Exists(_poolPath),
             FilesPlanned = plan.Count,
             RemoteCheckPerformed = remoteProbe is not null,
-            RemoteByteExact = remoteProbe is not null && byteExact
+            RemoteByteExact = remoteProbe is not null && byteExact,
+            RemoteParallelism = remoteProbe is not null ? parallelism : 0
         };
 
         var bySymbol = new Dictionary<string, SymbolVerifyReport>(StringComparer.OrdinalIgnoreCase);
+        var reportLock = new object();
 
-        foreach (var target in plan)
+        // Pre-walk: do every file's local Inspect synchronously and capture
+        // outcomes. This is CPU-bound (SHA-256 on a multi-GB pool), not
+        // network-bound, and parallelising it adds little. The expensive
+        // remote step is the one we fan out below.
+        var localResults = new (VerifyTarget Target, VerifyOutcome Outcome)[plan.Count];
+        for (var i = 0; i < plan.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var target = plan[i];
+            var outcome = Inspect(target.Path);
 
-            if (!bySymbol.TryGetValue(target.Symbol, out var symbolReport))
+            // Aggregate the local view immediately so the report is consistent
+            // even if the remote step is later cancelled mid-flight.
+            lock (reportLock)
             {
-                symbolReport = new SymbolVerifyReport { Symbol = target.Symbol };
-                bySymbol[target.Symbol] = symbolReport;
+                if (!bySymbol.TryGetValue(target.Symbol, out var symbolReport))
+                {
+                    symbolReport = new SymbolVerifyReport { Symbol = target.Symbol };
+                    bySymbol[target.Symbol] = symbolReport;
+                }
+
+                symbolReport.Increment(outcome);
+                if (outcome != VerifyOutcome.Ok && report.Mismatches.Count < CacheVerifyReport.MaxMismatchesShown)
+                {
+                    report.Mismatches.Add(new VerifyMismatch(target.Symbol, target.Path, outcome));
+                }
             }
 
-            var localOutcome = Inspect(target.Path);
-            symbolReport.Increment(localOutcome);
+            localResults[i] = (target, outcome);
 
-            if (localOutcome != VerifyOutcome.Ok && report.Mismatches.Count < CacheVerifyReport.MaxMismatchesShown)
+            // When no remote probe is configured, the file is fully done after
+            // the local check — count it now. With a probe, defer until after
+            // the remote step so the progress bar tracks end-to-end progress.
+            if (remoteProbe is null)
             {
-                report.Mismatches.Add(new VerifyMismatch(target.Symbol, target.Path, localOutcome));
+                Interlocked.Increment(ref _filesProcessed);
             }
+        }
 
-            // Only run remote check on locally-clean files. Probing a known-bad
-            // file wastes network without telling us anything new.
-            if (remoteProbe is not null && localOutcome == VerifyOutcome.Ok)
+        if (remoteProbe is null)
+        {
+            report.Symbols.AddRange(bySymbol.Values.OrderBy(s => s.Symbol, StringComparer.OrdinalIgnoreCase));
+            return report;
+        }
+
+        // Only locally-clean files get probed remotely. Probing a known-bad
+        // file wastes network without telling us anything new.
+        var probeTargets = localResults
+            .Where(r => r.Outcome == VerifyOutcome.Ok)
+            .Select(r => r.Target)
+            .ToList();
+
+        var skippedCount = plan.Count - probeTargets.Count;
+        // The skipped files are already locally counted; advance the progress
+        // counter so the bar's percent reflects the actual work-to-do.
+        Interlocked.Add(ref _filesProcessed, skippedCount);
+
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = parallelism,
+            CancellationToken = cancellationToken
+        };
+
+        await Parallel.ForEachAsync(probeTargets, parallelOptions, async (target, ct) =>
+        {
+            var (remoteOutcome, localSize, remoteSize) = await CheckRemoteAsync(target, remoteProbe, byteExact, ct);
+
+            lock (reportLock)
             {
-                var (remoteOutcome, localSize, remoteSize) = await CheckRemoteAsync(target, remoteProbe, byteExact, cancellationToken);
-                symbolReport.IncrementRemote(remoteOutcome);
+                // bySymbol entry exists from the local pre-walk above.
+                bySymbol[target.Symbol].IncrementRemote(remoteOutcome);
                 if (remoteOutcome != RemoteVerifyOutcome.RemoteOk
                     && report.RemoteMismatches.Count < CacheVerifyReport.MaxMismatchesShown)
                 {
@@ -189,7 +265,7 @@ public sealed class CacheVerifier
             }
 
             Interlocked.Increment(ref _filesProcessed);
-        }
+        });
 
         report.Symbols.AddRange(bySymbol.Values.OrderBy(s => s.Symbol, StringComparer.OrdinalIgnoreCase));
         return report;
@@ -327,6 +403,7 @@ public sealed class CacheVerifyReport
     public int FilesPlanned { get; init; }
     public bool RemoteCheckPerformed { get; init; }
     public bool RemoteByteExact { get; init; }
+    public int RemoteParallelism { get; init; }
     public List<SymbolVerifyReport> Symbols { get; } = new();
     public List<VerifyMismatch> Mismatches { get; } = new();
     public List<RemoteVerifyMismatch> RemoteMismatches { get; } = new();
@@ -404,7 +481,8 @@ public sealed class CacheVerifyReport
         {
             sb.AppendLine();
             var modeLabel = RemoteByteExact ? "byte-exact" : "size-only";
-            sb.AppendLine($"Remote drift check ({modeLabel} vs Dukascopy):");
+            var parallelLabel = RemoteParallelism > 1 ? $", parallel={RemoteParallelism}" : "";
+            sb.AppendLine($"Remote drift check ({modeLabel}{parallelLabel} vs Dukascopy):");
             sb.AppendLine($"  Files probed:    {TotalRemoteChecked,8:N0}  (locally-bad files skipped)");
             sb.AppendLine($"  Remote ok:       {TotalRemoteOk,8:N0}");
             if (TotalRemoteSizeMismatch > 0) sb.AppendLine($"  Size drift:      {TotalRemoteSizeMismatch,8:N0}  (Dukascopy size differs from cache)");

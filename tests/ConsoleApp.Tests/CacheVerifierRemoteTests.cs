@@ -46,18 +46,20 @@ public sealed class CacheVerifierRemoteTests : IDisposable
 
     /// <summary>
     /// FakeRemoteFileProbe — records every probe call and returns canned
-    /// results keyed on file name. Lets each test arrange exactly the
-    /// remote drift scenario it cares about.
+    /// results keyed on file name. Thread-safe so it can stand in for the
+    /// real probe under parallel verification. Lets each test arrange
+    /// exactly the remote drift scenario it cares about.
     /// </summary>
     private sealed class FakeRemoteFileProbe : IRemoteFileProbe
     {
-        public List<(string Symbol, int Year, int Month, int Day, string FileName, bool FetchBody)> Calls { get; } = new();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<(string Symbol, int Year, int Month, int Day, string FileName, bool FetchBody)> _calls = new();
+        public IReadOnlyCollection<(string Symbol, int Year, int Month, int Day, string FileName, bool FetchBody)> Calls => _calls;
         public Func<string, RemoteProbeResult> ResultFor { get; set; } =
             _ => new RemoteProbeResult(RemoteProbeStatus.Ok, 4, null);
 
         public Task<RemoteProbeResult> ProbeAsync(string symbol, int year, int dukaMonth, int day, string fileName, bool fetchBody, CancellationToken cancellationToken)
         {
-            Calls.Add((symbol, year, dukaMonth, day, fileName, fetchBody));
+            _calls.Enqueue((symbol, year, dukaMonth, day, fileName, fetchBody));
             return Task.FromResult(ResultFor(fileName));
         }
     }
@@ -151,7 +153,7 @@ public sealed class CacheVerifierRemoteTests : IDisposable
 
         // The fake should have been asked to fetch the body (byteExact=true).
         Assert.Single(probe.Calls);
-        Assert.True(probe.Calls[0].FetchBody);
+        Assert.True(probe.Calls.First().FetchBody);
         // Sanity: the local bytes really do hash to localHash (so the comparison is meaningful).
         Assert.NotEqual("DEADBEEFCAFEBABE", localHash);
     }
@@ -308,5 +310,65 @@ public sealed class CacheVerifierRemoteTests : IDisposable
 
         Assert.Contains("remote drift", rendered, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("cache repair", rendered);
+    }
+
+    [Fact]
+    public async Task Remote_ParallelProbing_PreservesCorrectness()
+    {
+        // 50 locally-clean files across two symbols. With parallelism=8 the
+        // fake probe will be called concurrently; assertions check that the
+        // aggregated report agrees with the per-file outcomes regardless.
+        const int FilesPerSymbol = 25;
+        for (var h = 0; h < FilesPerSymbol; h++)
+        {
+            CreateTickFile("EURUSD", h, new byte[] { (byte)h, (byte)(h + 1), 3, 4 });
+            CreateTickFile("GBPUSD", h, new byte[] { (byte)h, (byte)(h + 1), 5, 6 });
+        }
+
+        // Half the EURUSD files have size drift; everything else is clean.
+        var probe = new FakeRemoteFileProbe
+        {
+            ResultFor = name =>
+            {
+                // Encode "is this a drifty file" in the hour digits: hours 0-11 = drift, 12-24 = clean
+                var hour = int.Parse(name[..2]);
+                return hour < 12
+                    ? new RemoteProbeResult(RemoteProbeStatus.Ok, 99, null)
+                    : new RemoteProbeResult(RemoteProbeStatus.Ok, 4, null);
+            }
+        };
+
+        var verifier = new CacheVerifier(_root);
+        var plan = verifier.PlanFiles();
+        var report = await verifier.RunPlanWithRemoteAsync(plan, probe, byteExact: false, parallelism: 8);
+
+        // 50 local-Ok files, each probed exactly once.
+        Assert.Equal(50, probe.Calls.Count);
+        Assert.Equal(50, report.TotalRemoteChecked);
+        Assert.Equal(8, report.RemoteParallelism);
+
+        // 24 drift (hours 0-11 across both symbols), 26 clean (hours 12-24 across both symbols).
+        // EURUSD and GBPUSD each have 12 files in hours 0-11 → 24 total drift.
+        Assert.Equal(24, report.TotalRemoteSizeMismatch);
+        Assert.Equal(26, report.TotalRemoteOk);
+        Assert.False(report.AllClean);
+
+        // Counter must reach the total (no double-count, no skip).
+        Assert.Equal(plan.Count, verifier.FilesProcessed);
+    }
+
+    [Fact]
+    public async Task Remote_ParallelDefaultsToFour()
+    {
+        CreateTickFile("EURUSD", 10, new byte[] { 1, 2, 3, 4 });
+
+        var probe = new FakeRemoteFileProbe();
+        var verifier = new CacheVerifier(_root);
+        var plan = verifier.PlanFiles();
+        // Overload without explicit parallelism falls through to DefaultRemoteParallelism.
+        var report = await verifier.RunPlanWithRemoteAsync(plan, probe, byteExact: false);
+
+        Assert.Equal(CacheVerifier.DefaultRemoteParallelism, report.RemoteParallelism);
+        Assert.Equal(4, report.RemoteParallelism); // sanity: default is 4
     }
 }
