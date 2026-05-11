@@ -54,6 +54,17 @@ public sealed class PoolAuditor
                 continue;
             }
 
+            // Skip non-symbol directories that happen to live alongside symbol
+            // folders (e.g. `Exports/` for MT5 outputs, or smoke-test tmp dirs).
+            // A real symbol directory contains at least one 4-digit-year
+            // subdirectory matching the cache layout. Structural check, not a
+            // name match against instruments.json — symbols the user is
+            // tracking but hasn't curated in the config yet still register.
+            if (!LooksLikeSymbolDir(symbolDir))
+            {
+                continue;
+            }
+
             report.Symbols.Add(AuditSymbol(symbol, symbolDir));
         }
 
@@ -175,6 +186,40 @@ public sealed class PoolAuditor
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Cheap structural check used to filter non-symbol directories out of
+    /// the audit walk. A real symbol folder contains at least one
+    /// 4-digit-year subdirectory matching the
+    /// pool/symbol/yyyy/MM/dd/file.bi5 layout; ad-hoc neighbours like
+    /// <c>Exports/</c> or <c>MSBuildTempXXXXX/</c> don't, so they get
+    /// skipped here rather than reported as bogus symbols with zero
+    /// coverage. Short-circuits on the first match for cheapness.
+    /// </summary>
+    private static bool LooksLikeSymbolDir(string symbolDir)
+    {
+        IEnumerable<string> children;
+        try
+        {
+            children = Directory.EnumerateDirectories(symbolDir);
+        }
+        catch
+        {
+            return false;
+        }
+
+        foreach (var child in children)
+        {
+            var name = Path.GetFileName(child);
+            if (name.Length == 4
+                && int.TryParse(name, NumberStyles.Integer, CultureInfo.InvariantCulture, out var year)
+                && year is >= 1990 and <= 2999)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>

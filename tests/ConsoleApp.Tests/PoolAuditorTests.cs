@@ -262,4 +262,70 @@ public sealed class PoolAuditorTests : IDisposable
         // 52 weeks × 5 weekdays + 2 = 262 weekdays × 24h = 6288h.
         Assert.Equal(262 * 24, PoolAuditor.ExpectedWeekdayHoursInYear(2024));
     }
+
+    // ---------- Non-symbol directory filter (BACKLOG #52) ----------
+
+    [Fact]
+    public void Audit_SkipsExportsStyleNonSymbolDir()
+    {
+        // A real symbol folder...
+        CreateTickFile("EURUSD", 2025, 0, 2, 10);
+
+        // ...alongside the user's MT5 Exports directory, which has neighbouring
+        // CSV files but no yyyy/mm/dd structure inside.
+        Directory.CreateDirectory(Path.Combine(_root, "Exports"));
+        File.WriteAllText(Path.Combine(_root, "Exports", "EURUSD_M1.csv"), "stub");
+        File.WriteAllText(Path.Combine(_root, "Exports", "GBPUSD_M1.csv"), "stub");
+
+        var report = new PoolAuditor(_root).Audit();
+
+        var symbol = Assert.Single(report.Symbols);
+        Assert.Equal("EURUSD", symbol.Symbol);
+        Assert.DoesNotContain(report.Symbols, s => s.Symbol == "Exports");
+    }
+
+    [Fact]
+    public void Audit_SkipsDirsWithNoYearSubdir()
+    {
+        CreateTickFile("EURUSD", 2025, 0, 2, 10);
+
+        // A junk neighbour with arbitrary non-year subdirs.
+        var junk = Path.Combine(_root, "MSBuildTempABC123");
+        Directory.CreateDirectory(Path.Combine(junk, "scratch"));
+        File.WriteAllText(Path.Combine(junk, "scratch", "x.txt"), "junk");
+
+        var report = new PoolAuditor(_root).Audit();
+
+        Assert.Single(report.Symbols);
+        Assert.Equal("EURUSD", report.Symbols[0].Symbol);
+    }
+
+    [Fact]
+    public void Audit_AcceptsSymbolDirWithYearOnlyButNoFiles()
+    {
+        // Year subdirectory exists but is empty — still counts as a symbol
+        // (zero coverage is a valid, honest report).
+        Directory.CreateDirectory(Path.Combine(_root, "EURUSD", "2025"));
+
+        var report = new PoolAuditor(_root).Audit();
+
+        var symbol = Assert.Single(report.Symbols);
+        Assert.Equal("EURUSD", symbol.Symbol);
+        Assert.Equal(0, symbol.HourTickFiles);
+    }
+
+    [Fact]
+    public void Audit_FilterRejectsTwoDigitYearLikeDirs()
+    {
+        // A directory whose immediate child is "25" (not 4 digits) shouldn't
+        // pass the structural check, even though "25" parses as an int.
+        CreateTickFile("EURUSD", 2025, 0, 2, 10);
+        var fake = Path.Combine(_root, "FAKE");
+        Directory.CreateDirectory(Path.Combine(fake, "25"));
+
+        var report = new PoolAuditor(_root).Audit();
+
+        Assert.Single(report.Symbols);
+        Assert.Equal("EURUSD", report.Symbols[0].Symbol);
+    }
 }

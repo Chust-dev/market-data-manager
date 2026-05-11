@@ -33,7 +33,7 @@ re-downloading everything.
 | 21 | `cache cleanup` — remove zero-byte / orphan files | done | deletes by default; `--dry-run` previews; prunes empty parent dirs; preserves symbol root |
 | 22 | `cache add-symbol` / `cache remove-symbol` | pending | manage `instruments.json.digits` from CLI |
 | 23 | `cache size` — enhanced size breakdown (per-year, sortable) | pending | output formats: text table, csv |
-| 52 | Filter non-symbol subfolders out of cache audit (`Exports` leaking in) | pending | papercut |
+| 52 | Filter non-symbol subfolders out of cache audit (`Exports` leaking in) | done | structural check: subdir must contain at least one 4-digit-year child |
 | 53 | Remove vestigial cache-only mode after Manage pillar lands | pending | cleanup |
 | 54 | Discover: distinguish transient error from clean not-available | pending | Session A papercut, see Known Issues |
 | 55 | Wire ProgressBar into PoolAuditor and Exporters | pending | cosmetic UX polish |
@@ -121,4 +121,5 @@ Documented in `CHANGELOG.md` under "Known issues (parked from Session A)".
   and transient HTTP errors; idempotent skip then prevents retry.
   Workaround: `--refresh`.
 - **#56** — duplicate ProgressBar render on Ctrl+C. Cosmetic.
-- **#52** — `Exports` folder appears as a symbol in cache audit output.
+- ~~**#52** — `Exports` folder appears as a symbol in cache audit output~~
+  → **fixed** in Session B (`LooksLikeSymbolDir` structural filter).
