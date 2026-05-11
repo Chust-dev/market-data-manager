@@ -264,4 +264,117 @@ public sealed class CacheCleanerTests : IDisposable
         var rendered = report.Render();
         Assert.Contains("Nothing to remove", rendered);
     }
+
+    // ---------- PurgeSymbol (cache cleanup --purge) ----------
+
+    [Fact]
+    public void Purge_DryRun_TouchesNothing()
+    {
+        var bi5 = CreateBi5("BTCUSD", 10, new byte[] { 1, 2, 3, 4 });
+        var bi5b = CreateBi5("BTCUSD", 11, new byte[] { 5, 6, 7, 8 });
+        var symbolDir = Path.Combine(_root, "BTCUSD");
+
+        var report = new CacheCleaner(_root).PurgeSymbol("BTCUSD", dryRun: true);
+
+        Assert.True(report.DryRun);
+        Assert.Equal(2 + 2, report.FilesRemoved); // 2 .bi5 + 2 .meta.json
+        Assert.True(report.BytesRemoved > 0);
+
+        // Files still on disk after dry-run.
+        Assert.True(File.Exists(bi5));
+        Assert.True(File.Exists(bi5b));
+        Assert.True(Directory.Exists(symbolDir));
+    }
+
+    [Fact]
+    public void Purge_Apply_WipesSymbolDirectory()
+    {
+        CreateBi5("BTCUSD", 10, new byte[] { 1, 2, 3, 4 });
+        CreateBi5("BTCUSD", 11, new byte[] { 5, 6, 7, 8 });
+        // Also create another symbol that should be left alone.
+        var keep = CreateBi5("EURUSD", 10, new byte[] { 1, 2, 3, 4 });
+
+        var report = new CacheCleaner(_root).PurgeSymbol("BTCUSD", dryRun: false);
+
+        Assert.False(report.DryRun);
+        Assert.Equal(4, report.FilesRemoved); // 2 .bi5 + 2 .meta.json
+        Assert.True(report.BytesRemoved > 0);
+        Assert.False(report.AnyFailures);
+
+        // Symbol directory is gone entirely.
+        Assert.False(Directory.Exists(Path.Combine(_root, "BTCUSD")));
+        // Unrelated symbol untouched.
+        Assert.True(File.Exists(keep));
+    }
+
+    [Fact]
+    public void Purge_NonexistentSymbol_ReturnsZeroTotals()
+    {
+        var report = new CacheCleaner(_root).PurgeSymbol("GHOSTSYM", dryRun: false);
+
+        Assert.Equal(0, report.FilesRemoved);
+        Assert.Equal(0, report.BytesRemoved);
+        Assert.False(report.AnyFailures);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Purge_BlankSymbol_NoOp(string symbol)
+    {
+        CreateBi5("EURUSD", 10, new byte[] { 1, 2, 3, 4 });
+        var report = new CacheCleaner(_root).PurgeSymbol(symbol, dryRun: false);
+
+        Assert.Equal(0, report.FilesRemoved);
+        // The unrelated symbol survives.
+        Assert.True(Directory.Exists(Path.Combine(_root, "EURUSD")));
+    }
+
+    [Fact]
+    public void Purge_RejectsPathTraversal()
+    {
+        CreateBi5("EURUSD", 10, new byte[] { 1, 2, 3, 4 });
+
+        // A maliciously-named symbol with a path separator must NOT reach
+        // outside the pool root. Path.GetFileName strips the prefix; if the
+        // result differs from the input, we treat it as invalid.
+        var bad = Path.Combine("..", "EURUSD");
+        var report = new CacheCleaner(_root).PurgeSymbol(bad, dryRun: false);
+
+        Assert.Equal(0, report.FilesRemoved);
+        Assert.True(report.AnyFailures);
+        // Unrelated data untouched.
+        Assert.True(Directory.Exists(Path.Combine(_root, "EURUSD")));
+    }
+
+    [Fact]
+    public void Purge_Render_DryRunAnnouncesNoChanges()
+    {
+        CreateBi5("BTCUSD", 10, new byte[] { 1, 2, 3, 4 });
+        var report = new CacheCleaner(_root).PurgeSymbol("BTCUSD", dryRun: true);
+        var rendered = report.Render();
+
+        Assert.Contains("DRY RUN", rendered);
+        Assert.Contains("Re-run without --dry-run", rendered);
+    }
+
+    [Fact]
+    public void Purge_Render_ApplyAnnouncesSymbol()
+    {
+        CreateBi5("BTCUSD", 10, new byte[] { 1, 2, 3, 4 });
+        var report = new CacheCleaner(_root).PurgeSymbol("BTCUSD", dryRun: false);
+        var rendered = report.Render();
+
+        Assert.Contains("Purged BTCUSD", rendered);
+        Assert.Contains("Files removed", rendered);
+    }
+
+    [Fact]
+    public void Purge_Render_NonexistentSymbolFriendlyMessage()
+    {
+        var report = new CacheCleaner(_root).PurgeSymbol("GHOSTSYM", dryRun: false);
+        var rendered = report.Render();
+
+        Assert.Contains("Nothing to purge", rendered);
+    }
 }

@@ -15,6 +15,7 @@ internal sealed record CacheCleanupOptions(
     IReadOnlyCollection<string>? InstrumentFilter,
     string PoolPath,
     bool DryRun,
+    bool Purge,
     bool Quiet)
 {
     public static CacheCleanupOptions FromArgs(IReadOnlyDictionary<string, string> args) =>
@@ -22,5 +23,6 @@ internal sealed record CacheCleanupOptions(
             InstrumentFilter: CommonParsingHelpers.ParseInstrumentFilter(args),
             PoolPath: CommonParsingHelpers.ParsePoolPath(args),
             DryRun: CommonParsingHelpers.ParseDryRun(args),
+            Purge: CommonParsingHelpers.ParsePurge(args),
             Quiet: CommonParsingHelpers.ParseQuiet(args));
 }

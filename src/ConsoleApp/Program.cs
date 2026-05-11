@@ -417,7 +417,9 @@ public static class Program
             if (result.RemovedFromEarliest) sections.Add("earliest");
             if (result.RemovedFromLatest) sections.Add("latest");
             Console.WriteLine($"Removed {symbol} from {configPath} (sections: {string.Join(", ", sections)}).");
-            Console.WriteLine($"  Note: cached .bi5 files for {symbol} are not touched. Run `cache cleanup --instrument {symbol}` after deleting the symbol folder if you want to reclaim disk space.");
+            Console.WriteLine($"  Note: cached .bi5 files for {symbol} are not touched. To reclaim disk space:");
+            Console.WriteLine($"    cache cleanup --purge --instrument {symbol} --dry-run   # preview");
+            Console.WriteLine($"    cache cleanup --purge --instrument {symbol}             # actually delete");
         }
         return 0;
     }
@@ -640,6 +642,14 @@ public static class Program
             return 1;
         }
 
+        // --purge branch: wipe one or more symbol subdirectories entirely.
+        // Different operation from the regular junk-cleanup walk; needs an
+        // explicit symbol filter so we never nuke the whole pool by accident.
+        if (options.Purge)
+        {
+            return RunPurge(options, poolPath);
+        }
+
         var cleaner = new CacheCleaner(poolPath);
         var plan = cleaner.PlanCleanup(options.InstrumentFilter);
 
@@ -687,6 +697,64 @@ public static class Program
         return report.AnyFailures ? 1 : 0;
     }
 
+    /// <summary>
+    /// `cache cleanup --purge` path: wipe one or more symbol subdirectories
+    /// entirely. Different from the regular junk-cleanup walk — this is the
+    /// "I just ran cache remove-symbol, now reclaim the disk space" operation.
+    /// Requires <c>--instrument SYM</c> or <c>--symbols A,B,...</c>; we
+    /// refuse to operate without an explicit symbol filter so the pool can
+    /// never be wiped wholesale by accident.
+    /// </summary>
+    private static int RunPurge(CacheCleanupOptions options, string poolPath)
+    {
+        if (options.InstrumentFilter is null || options.InstrumentFilter.Count == 0)
+        {
+            Console.WriteLine("--purge requires --instrument SYM or --symbols A,B,...");
+            return 1;
+        }
+
+        var cleaner = new CacheCleaner(poolPath);
+        var reports = new List<CachePurgeReport>();
+        var anyFailures = false;
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
+        foreach (var symbol in options.InstrumentFilter)
+        {
+            if (cts.IsCancellationRequested) break;
+            if (!options.Quiet)
+            {
+                Console.WriteLine(options.DryRun
+                    ? $"Dry-run: planning purge of {symbol} from {poolPath}..."
+                    : $"WARNING: about to DELETE every cached file for {symbol} from {poolPath}.");
+            }
+
+            CachePurgeReport report;
+            try
+            {
+                report = cleaner.PurgeSymbol(symbol, options.DryRun, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Purge cancelled.");
+                return 1;
+            }
+
+            Console.WriteLine();
+            Console.Write(report.Render());
+            reports.Add(report);
+            anyFailures |= report.AnyFailures;
+        }
+
+        return anyFailures ? 1 : 0;
+    }
+
     private static void PrintHelp()
     {
         Console.WriteLine("Dukascopy Historical Tick Downloader");
@@ -713,8 +781,9 @@ public static class Program
         Console.WriteLine("                 --start/--end scope to a date range (day precision). --parallel defaults to 8 concurrent probes.");
         Console.WriteLine("  cache repair   [--instrument SYM] [--dry-run] [--trust-existing] [--quiet]");
         Console.WriteLine("                 Auto-fix files flagged by verify (refetch from Dukascopy or regenerate sidecar).");
-        Console.WriteLine("  cache cleanup  [--instrument SYM] [--dry-run] [--quiet]");
-        Console.WriteLine("                 DELETES zero-byte .bi5, orphan .meta.json, and .tmp files. Use --dry-run first.");
+        Console.WriteLine("  cache cleanup  [--instrument SYM] [--dry-run] [--purge] [--quiet]");
+        Console.WriteLine("                 Default: DELETES zero-byte .bi5, orphan .meta.json, and .tmp files. Use --dry-run first.");
+        Console.WriteLine("                 --purge --instrument SYM wipes the symbol's entire pool subdirectory (after cache remove-symbol).");
         Console.WriteLine("  export bars    --instrument SYM --start ISO --end ISO --timeframe TF [--format csv|csv+hst]");
         Console.WriteLine("                 Read cache (offline), write MT5 bar CSV/HST.");
         Console.WriteLine("  export ticks   --instrument SYM --start ISO --end ISO");

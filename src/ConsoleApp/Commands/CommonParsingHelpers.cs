@@ -154,6 +154,16 @@ internal static class CommonParsingHelpers
         args.ContainsKey("no-verify-source");
 
     /// <summary>
+    /// `--purge` for `cache cleanup`: wipe a symbol's entire pool
+    /// subdirectory instead of running the regular junk-file cleanup.
+    /// Requires <c>--instrument SYM</c> (or `--symbols A,B,...`). Pairs
+    /// with <c>cache remove-symbol</c> to fully retire a symbol's
+    /// footprint.
+    /// </summary>
+    public static bool ParsePurge(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("purge");
+
+    /// <summary>
     /// `--remote` for `cache verify`. Adds a per-file probe to Dukascopy to
     /// detect drift between cached files and source bytes (e.g. amended ticks).
     /// </summary>

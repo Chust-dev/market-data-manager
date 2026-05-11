@@ -275,6 +275,98 @@ public sealed class CacheCleaner
             return false;
         }
     }
+
+    /// <summary>
+    /// Wipe a symbol's entire pool subdirectory: every <c>.bi5</c>, every
+    /// sidecar, every year/month/day folder, plus the symbol root itself.
+    /// Used by <c>cache cleanup --purge --instrument SYM</c> to reclaim the
+    /// disk space after <c>cache remove-symbol</c> drops the config entry.
+    ///
+    /// <paramref name="dryRun"/>=true counts what would be deleted and
+    /// returns the totals without touching the filesystem. With dryRun=false,
+    /// the symbol directory is removed recursively in a single
+    /// <see cref="Directory.Delete(string, bool)"/> call.
+    ///
+    /// Refuses if the resolved path escapes the pool root (defence against
+    /// a maliciously-named symbol containing path separators / "..").
+    /// Returns a zero-totals report if the symbol directory doesn't exist.
+    /// </summary>
+    public CachePurgeReport PurgeSymbol(string symbol, bool dryRun, CancellationToken cancellationToken = default)
+    {
+        var report = new CachePurgeReport
+        {
+            PoolPath = _poolPath,
+            Symbol = symbol ?? string.Empty,
+            DryRun = dryRun
+        };
+
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            return report;
+        }
+
+        // Sanitise: strip path components so a hostile or typo'd symbol like
+        // "../EURUSD" can't reach outside the pool. After Path.GetFileName we
+        // have just the leaf segment.
+        var leaf = Path.GetFileName(symbol.Trim());
+        if (string.IsNullOrWhiteSpace(leaf) || leaf != symbol.Trim())
+        {
+            report.DeletionErrors.Add($"Invalid symbol name: '{symbol}'. Symbol must be a single path segment.");
+            return report;
+        }
+
+        var symbolDir = Path.Combine(_poolPath, leaf);
+        if (!Directory.Exists(symbolDir))
+        {
+            return report; // Nothing to purge — zero totals.
+        }
+
+        // Tally files and bytes up-front so the report is consistent whether
+        // or not we actually delete. EnumerateFiles materialises lazily; we
+        // pull into a list to keep iteration cheap if a real delete then races.
+        List<string> files;
+        try
+        {
+            files = Directory.EnumerateFiles(symbolDir, "*", SearchOption.AllDirectories).ToList();
+        }
+        catch (Exception ex)
+        {
+            report.DeletionErrors.Add($"Enumeration failed for {symbolDir}: {ex.Message}");
+            return report;
+        }
+
+        foreach (var file in files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                report.BytesRemoved += new FileInfo(file).Length;
+                report.FilesRemoved++;
+            }
+            catch
+            {
+                // Unreadable file — still counts as "would be removed" by the
+                // recursive delete below. Just skip its byte tally.
+                report.FilesRemoved++;
+            }
+        }
+
+        if (dryRun)
+        {
+            return report;
+        }
+
+        try
+        {
+            Directory.Delete(symbolDir, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            report.DeletionErrors.Add($"{symbolDir}: {ex.Message}");
+        }
+
+        return report;
+    }
 }
 
 public enum CleanupReason
@@ -376,6 +468,84 @@ public sealed class CacheCleanupReport
     }
 
     private static string FormatBytes(long bytes)
+    {
+        const double KB = 1024;
+        const double MB = KB * 1024;
+        const double GB = MB * 1024;
+        if (bytes >= GB) return $"{bytes / GB:F2} GB";
+        if (bytes >= MB) return $"{bytes / MB:F1} MB";
+        if (bytes >= KB) return $"{bytes / KB:F0} KB";
+        return $"{bytes} B";
+    }
+}
+
+/// <summary>
+/// Result of <see cref="CacheCleaner.PurgeSymbol"/>. Surfaces what was
+/// removed (or would be, in dry-run) so the command layer can print a
+/// useful summary. <see cref="DeletionErrors"/> captures any per-file or
+/// directory-delete failures; the operation is best-effort and continues
+/// past individual errors.
+/// </summary>
+public sealed class CachePurgeReport
+{
+    public required string PoolPath { get; init; }
+    public required string Symbol { get; init; }
+    public bool DryRun { get; init; }
+    public int FilesRemoved { get; set; }
+    public long BytesRemoved { get; set; }
+    public List<string> DeletionErrors { get; } = new();
+
+    public bool AnyFailures => DeletionErrors.Count > 0;
+
+    public string Render()
+    {
+        var sb = new System.Text.StringBuilder();
+        if (DryRun)
+        {
+            sb.AppendLine("DRY RUN — no files deleted.");
+        }
+        else
+        {
+            sb.AppendLine($"Purged {Symbol} from {PoolPath}.");
+        }
+
+        if (FilesRemoved == 0)
+        {
+            sb.AppendLine($"Nothing to purge: {Symbol} directory does not exist or is empty under {PoolPath}.");
+        }
+        else
+        {
+            sb.AppendLine($"  Files {(DryRun ? "to remove" : "removed")}: {FilesRemoved:N0}");
+            sb.AppendLine($"  Bytes {(DryRun ? "to reclaim" : "reclaimed")}: {FormatBytesStatic(BytesRemoved)}");
+        }
+
+        if (AnyFailures)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"Failures: {DeletionErrors.Count:N0}");
+            foreach (var err in DeletionErrors.Take(10))
+            {
+                sb.AppendLine($"  {err}");
+            }
+            if (DeletionErrors.Count > 10)
+            {
+                sb.AppendLine($"  ... {DeletionErrors.Count - 10:N0} more not shown");
+            }
+        }
+
+        if (DryRun && FilesRemoved > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Re-run without --dry-run to actually delete.");
+        }
+
+        return sb.ToString();
+    }
+
+    // Duplicated from CacheCleanupReport — both are end-of-file types in this
+    // same source file and a shared helper would mean another type declaration
+    // for ~7 lines. Acceptable.
+    private static string FormatBytesStatic(long bytes)
     {
         const double KB = 1024;
         const double MB = KB * 1024;

@@ -64,6 +64,7 @@ adds discoverability, and cleans up cosmetic papercuts.
 | 56 | Fix duplicate ProgressBar render on Ctrl+C cancel | pending | cosmetic, ~15 lines |
 | 57 | Redesign `cache audit --by-year` layout for wide pools | pending | 23 years × 29 symbols at ~7 chars per cell is ~200 cols wide and wraps awkwardly. Options on the table: compact unicode heatmap (1 char/year), chunked 8-year pages, per-symbol gap summary, CSV output. User deferred decision. |
 | 58 | `cache size --csv` / `--output PATH` follow-up | pending | Text version of #23 shipped without CSV; add `--csv` flag to emit machine-readable rows (integer bytes, Symbol[,Year],SizeBytes,Files) and `--output PATH` to write to a file instead of stdout |
+| 59 | `cache cleanup --purge --instrument SYM` | done | Closes the remove-symbol → reclaim-disk-space gap. Recursive delete of the symbol's pool subdirectory with `--dry-run` preview; path-traversal-safe; refuses without explicit symbol filter |
 
 ## Release
 

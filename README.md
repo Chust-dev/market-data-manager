@@ -29,7 +29,7 @@ HistoricalData cache remove-symbol  --instrument BTCUSD [--no-prompt]
 HistoricalData cache verify   [--instrument EURUSD] [--start ISO] [--end ISO]
                               [--remote [--size-only] [--parallel N]] [--quiet]
 HistoricalData cache repair   [--instrument EURUSD] [--dry-run] [--trust-existing] [--quiet]
-HistoricalData cache cleanup  [--instrument EURUSD] [--dry-run] [--quiet]
+HistoricalData cache cleanup  [--instrument EURUSD] [--dry-run] [--purge] [--quiet]
 HistoricalData export bars    --instrument EURUSD --start ... --end ... --timeframe m1
 HistoricalData export ticks   --instrument EURUSD --start ... --end ...
 ```
