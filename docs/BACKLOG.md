@@ -36,7 +36,7 @@ re-downloading everything.
 | 52 | Filter non-symbol subfolders out of cache audit (`Exports` leaking in) | done | structural check: subdir must contain at least one 4-digit-year child |
 | 53 | Remove vestigial cache-only mode after Manage pillar lands | pending | cleanup |
 | 54 | Discover: distinguish transient error from clean not-available | pending | Session A papercut, see Known Issues |
-| 55 | Wire ProgressBar into PoolAuditor and Exporters | pending | cosmetic UX polish |
+| 55 | Wire ProgressBar into PoolAuditor and Exporters | deferred | Manage pillar deferred — `cache audit` runs in seconds and `cache discover`'s per-symbol streaming output is already the right progress UI; a bar would conflict with it. Exporters may be revisited as a separate concern later. |
 
 ## Session C — trading-relevant (later)
 
