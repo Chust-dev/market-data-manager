@@ -24,6 +24,8 @@ HistoricalData cache catchup  [--instrument EURUSD | --symbols all] [--window 60
 HistoricalData cache discover [--instrument EURUSD | --symbols all] [--since 2000-01-01]
 HistoricalData cache audit    [--instrument EURUSD] [--by-year] [--by-month | --no-by-month]
 HistoricalData cache size     [--instrument EURUSD] [--by-year] [--sort size|symbol|year|files]
+HistoricalData cache add-symbol     --instrument EURGBP --digits 5 [--force] [--no-verify-source]
+HistoricalData cache remove-symbol  --instrument BTCUSD [--no-prompt]
 HistoricalData cache verify   [--instrument EURUSD] [--start ISO] [--end ISO]
                               [--remote [--size-only] [--parallel N]] [--quiet]
 HistoricalData cache repair   [--instrument EURUSD] [--dry-run] [--trust-existing] [--quiet]

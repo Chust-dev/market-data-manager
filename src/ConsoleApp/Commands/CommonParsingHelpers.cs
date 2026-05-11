@@ -138,6 +138,22 @@ internal static class CommonParsingHelpers
         args.ContainsKey("trust-existing");
 
     /// <summary>
+    /// `--force` for `cache add-symbol`: overwrite an existing digits entry
+    /// rather than refusing the add. Off by default to protect curated
+    /// entries from accidental clobber.
+    /// </summary>
+    public static bool ParseForce(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("force");
+
+    /// <summary>
+    /// `--no-verify-source` for `cache add-symbol`: skip the Dukascopy
+    /// reachability probe and trust the user. Default is to verify so
+    /// typos like `EURUS` don't get added.
+    /// </summary>
+    public static bool ParseNoVerifySource(IReadOnlyDictionary<string, string> args) =>
+        args.ContainsKey("no-verify-source");
+
+    /// <summary>
     /// `--remote` for `cache verify`. Adds a per-file probe to Dukascopy to
     /// detect drift between cached files and source bytes (e.g. amended ticks).
     /// </summary>

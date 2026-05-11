@@ -239,6 +239,8 @@ public static class Program
         {
             ("cache", "audit") => new CacheAuditCommand(),
             ("cache", "size") => new CacheSizeCommand(),
+            ("cache", "add-symbol") => new CacheAddSymbolCommand(),
+            ("cache", "remove-symbol") => new CacheRemoveSymbolCommand(),
             ("cache", "update") => new CacheUpdateCommand(),
             ("cache", "catchup") => new CacheCatchupCommand(),
             ("cache", "discover") => new CacheDiscoverCommand(),
@@ -249,6 +251,175 @@ public static class Program
             ("export", "ticks") => new ExportTicksCommand(),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Drives `cache add-symbol`. Validates inputs via
+    /// <see cref="InstrumentConfigEditor.TryAdd"/>; by default probes
+    /// Dukascopy to confirm the symbol exists at source before mutating
+    /// the config. Saves <c>instruments.json</c> only on success.
+    /// </summary>
+    internal static async Task<int> RunAddSymbolAsync(CacheAddSymbolOptions options)
+    {
+        var symbol = options.Instrument?.Trim().ToUpperInvariant() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            Console.WriteLine("Pass --instrument SYM. Example: cache add-symbol --instrument EURGBP --digits 5");
+            return 1;
+        }
+        if (options.Digits < 1 || options.Digits > InstrumentConfigEditor.MaxDigits)
+        {
+            Console.WriteLine($"--digits must be between 1 and {InstrumentConfigEditor.MaxDigits} (got {options.Digits}).");
+            return 1;
+        }
+
+        var configPath = options.InstrumentsConfigPath;
+        var config = InstrumentConfig.Load(configPath);
+
+        // Existing-entry check up-front so we don't burn a network probe
+        // when the user just typo'd a symbol they already have. Force flag
+        // bypasses.
+        if (config.Digits.ContainsKey(symbol) && !options.Force)
+        {
+            Console.WriteLine($"{symbol} is already in {configPath} with digits={config.Digits[symbol]}. Pass --force to overwrite.");
+            return 1;
+        }
+
+        // Verify-source probe: a single round-trip to Dukascopy that
+        // catches typos before they pollute the config. Skipped with
+        // --no-verify-source for exotic symbols Dukascopy doesn't have
+        // yet but the user wants tracked.
+        if (!options.NoVerifySource)
+        {
+            if (!options.Quiet)
+            {
+                Console.WriteLine($"Probing Dukascopy for {symbol}...");
+            }
+            var httpConfig = HttpConfig.Load(options.HttpConfigPath);
+            var poolPath = PathUtils.NormalizePath(options.PoolPath);
+            Directory.CreateDirectory(poolPath);
+            var client = new DukascopyClient(httpConfig, poolPath, verbose: false);
+            using var cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) =>
+            {
+                e.Cancel = true;
+                cts.Cancel();
+            };
+            // Use a recent fixed week as the probe window — same approach
+            // the bulk path uses for symbol availability checks.
+            var now = DateTimeOffset.UtcNow;
+            var probe = await client.ProbeSymbolAvailabilityAsync(symbol, now.AddDays(-7), now, cts.Token);
+            if (probe.Status == SymbolProbeStatus.NotFound)
+            {
+                Console.WriteLine($"Dukascopy has no data for {symbol}. Refusing to add (use --no-verify-source to skip this check).");
+                return 1;
+            }
+            if (probe.Status == SymbolProbeStatus.TransientError)
+            {
+                Console.WriteLine(
+                    $"Could not reach Dukascopy to verify {symbol}: {probe.ErrorMessage ?? "transient error"}. " +
+                    "Refusing to add (use --no-verify-source to skip this check, or retry later).");
+                return 1;
+            }
+        }
+
+        var result = InstrumentConfigEditor.TryAdd(config, symbol, options.Digits, options.Force);
+        switch (result)
+        {
+            case AddSymbolResult.AlreadyExists:
+                // Defensive — should be caught by the pre-check above.
+                Console.WriteLine($"{symbol} already exists; use --force to overwrite.");
+                return 1;
+            case AddSymbolResult.InvalidSymbol:
+                Console.WriteLine($"Invalid symbol: '{options.Instrument}'");
+                return 1;
+            case AddSymbolResult.InvalidDigits:
+                Console.WriteLine($"Invalid digits value: {options.Digits}");
+                return 1;
+        }
+
+        try
+        {
+            config.Save(configPath);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to save {configPath}: {ex.Message}");
+            return 1;
+        }
+
+        if (!options.Quiet)
+        {
+            var action = options.Force && config.Digits.Count > 0 ? "Updated" : "Added";
+            Console.WriteLine($"{action} {symbol} (digits={options.Digits}) in {configPath}.");
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Drives `cache remove-symbol`. Removes the symbol from all three
+    /// sections of <c>instruments.json</c>. Prompts for confirmation
+    /// unless <c>--no-prompt</c>. Never touches cached <c>.bi5</c> files.
+    /// </summary>
+    internal static int RunRemoveSymbol(CacheRemoveSymbolOptions options)
+    {
+        var symbol = options.Instrument?.Trim().ToUpperInvariant() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            Console.WriteLine("Pass --instrument SYM. Example: cache remove-symbol --instrument BTCUSD");
+            return 1;
+        }
+
+        var configPath = options.InstrumentsConfigPath;
+        var config = InstrumentConfig.Load(configPath);
+
+        if (!config.Digits.ContainsKey(symbol)
+            && !config.Earliest.ContainsKey(symbol)
+            && !config.Latest.ContainsKey(symbol))
+        {
+            Console.WriteLine($"{symbol} is not in {configPath} (nothing to remove).");
+            return 0;
+        }
+
+        if (!options.NonInteractive)
+        {
+            Console.Write($"Remove {symbol} from {configPath}? [y/N] ");
+            var line = Console.ReadLine()?.Trim().ToLowerInvariant();
+            if (line != "y" && line != "yes")
+            {
+                Console.WriteLine("Cancelled. No changes made.");
+                return 0;
+            }
+        }
+
+        var result = InstrumentConfigEditor.Remove(config, symbol);
+        if (!result.AnyRemoved)
+        {
+            // Defensive — the contains-check above should have caught this.
+            Console.WriteLine($"{symbol} was not in any section.");
+            return 0;
+        }
+
+        try
+        {
+            config.Save(configPath);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to save {configPath}: {ex.Message}");
+            return 1;
+        }
+
+        if (!options.Quiet)
+        {
+            var sections = new List<string>();
+            if (result.RemovedFromDigits) sections.Add("digits");
+            if (result.RemovedFromEarliest) sections.Add("earliest");
+            if (result.RemovedFromLatest) sections.Add("latest");
+            Console.WriteLine($"Removed {symbol} from {configPath} (sections: {string.Join(", ", sections)}).");
+            Console.WriteLine($"  Note: cached .bi5 files for {symbol} are not touched. Run `cache cleanup --instrument {symbol}` after deleting the symbol folder if you want to reclaim disk space.");
+        }
+        return 0;
     }
 
     /// <summary>
@@ -532,6 +703,10 @@ public static class Program
         Console.WriteLine("                 --by-year / --by-month add finer-grained coverage grids; month is auto-included for single-symbol audits.");
         Console.WriteLine("  cache size     [--instrument SYM] [--by-year] [--sort size|symbol|year|files]");
         Console.WriteLine("                 Disk-usage breakdown by symbol (and optionally year). Sorted by --sort (default: size, largest first).");
+        Console.WriteLine("  cache add-symbol     --instrument SYM --digits N [--force] [--no-verify-source]");
+        Console.WriteLine("                       Register a new symbol in instruments.json. Probes Dukascopy by default; --force overwrites existing.");
+        Console.WriteLine("  cache remove-symbol  --instrument SYM [--no-prompt]");
+        Console.WriteLine("                       Drop a symbol from instruments.json (all three sections). Prompts unless --no-prompt.");
         Console.WriteLine("  cache verify   [--instrument SYM] [--start ISO] [--end ISO]");
         Console.WriteLine("                 [--remote [--size-only] [--parallel N]] [--quiet]");
         Console.WriteLine("                 Recompute SHA-256 vs sidecar (local) and optionally probe Dukascopy for drift.");

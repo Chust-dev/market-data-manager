@@ -31,7 +31,7 @@ re-downloading everything.
 | 14 | Coverage report per month / per year | done | `--by-year` and `--by-month` flags on cache audit; month grid auto-included for single-symbol audits |
 | 20 | `cache repair` — auto-fix corrupt files | done | refetch via DukascopyClient, or regenerate sidecar with `--trust-existing`; `--dry-run` previews |
 | 21 | `cache cleanup` — remove zero-byte / orphan files | done | deletes by default; `--dry-run` previews; prunes empty parent dirs; preserves symbol root |
-| 22 | `cache add-symbol` / `cache remove-symbol` | pending | manage `instruments.json.digits` from CLI |
+| 22 | `cache add-symbol` / `cache remove-symbol` | done | `InstrumentConfigEditor` policy + add-symbol (verify-source by default, `--force` to upsert) + remove-symbol (all sections, confirms unless `--no-prompt`) |
 | 23 | `cache size` — enhanced size breakdown (per-year, sortable) | partial | text output shipped (per-symbol totals + `--by-year` long format, `--sort size\|symbol\|year\|files`, non-symbol-dir filter via #52); CSV / `--output PATH` deferred to a follow-up |
 | 52 | Filter non-symbol subfolders out of cache audit (`Exports` leaking in) | done | structural check: subdir must contain at least one 4-digit-year child |
 | 53 | Remove vestigial cache-only mode after Manage pillar lands | done | dropped the `--audit` legacy flag + `AppOptions.Audit` field; `cache audit` subcommand is the only path now |
