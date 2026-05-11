@@ -70,7 +70,8 @@ public sealed class PillarSmokeTests : IDisposable
             DigitsMap: "",
             NonInteractive: true,
             Verbose: false,
-            Quiet: true);
+            Quiet: true,
+            SpreadMethod: SpreadMethod.Last);
 
         var result = await new BarExporter().RunAsync(options);
 
@@ -102,7 +103,8 @@ public sealed class PillarSmokeTests : IDisposable
             DigitsMap: "",
             NonInteractive: true,
             Verbose: false,
-            Quiet: true);
+            Quiet: true,
+            SpreadMethod: SpreadMethod.Last);
 
         var result = await new BarExporter().RunAsync(options);
 
@@ -161,7 +163,8 @@ public sealed class PillarSmokeTests : IDisposable
             DigitsMap: "",
             NonInteractive: true,
             Verbose: false,
-            Quiet: true);
+            Quiet: true,
+            SpreadMethod: SpreadMethod.Last);
 
         var result = await new BarExporter().RunAsync(options);
 

@@ -1,3 +1,5 @@
+using HistoricalData.Export;
+
 namespace HistoricalData.Commands.Options;
 
 /// <summary>
@@ -28,7 +30,8 @@ internal sealed record BarExportOptions(
     string DigitsMap,
     bool NonInteractive,
     bool Verbose,
-    bool Quiet)
+    bool Quiet,
+    SpreadMethod SpreadMethod)
 {
     public static BarExportOptions FromArgs(IReadOnlyDictionary<string, string> args)
     {
@@ -53,6 +56,7 @@ internal sealed record BarExportOptions(
             DigitsMap: CommonParsingHelpers.ParseDigitsMap(args),
             NonInteractive: CommonParsingHelpers.ParseNonInteractive(args),
             Verbose: CommonParsingHelpers.ParseVerbose(args),
-            Quiet: CommonParsingHelpers.ParseQuiet(args));
+            Quiet: CommonParsingHelpers.ParseQuiet(args),
+            SpreadMethod: CommonParsingHelpers.ParseSpreadMethod(args));
     }
 }

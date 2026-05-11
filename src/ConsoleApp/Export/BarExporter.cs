@@ -171,7 +171,8 @@ internal sealed class BarExporter
             endUtc,
             options.DeduplicateTicks,
             options.SkipFallbackIfTicked,
-            sessionCalendar);
+            sessionCalendar,
+            options.SpreadMethod);
 
         // Cache-only flags forced on. fallbackToM1=true means the daily M1
         // .bi5 (if cached) fills hours where tick files are absent — a read
@@ -193,7 +194,7 @@ internal sealed class BarExporter
         var bars = m1Bars;
         if (timeframeInfo.Minutes > 1)
         {
-            bars = BarResampler.Resample(bars, timeframeInfo);
+            bars = BarResampler.Resample(bars, timeframeInfo, options.SpreadMethod);
         }
 
         summary.Bars = bars.Count;

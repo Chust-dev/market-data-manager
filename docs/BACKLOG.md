@@ -46,7 +46,7 @@ backtesting against a real broker setup.
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 15 | DST-aware broker offset (`--broker ic-markets`) | pending | replaces static `--offset` for live-broker alignment |
-| 43 | Configurable spread aggregation method (`--spread-method`) | pending | last / median / mean / min |
+| 43 | Configurable spread aggregation method (`--spread-method`) | done | last (default — preserves prior behaviour) / min / mean / median; applied at both per-minute aggregation and M1→higher-TF resample. Two minor behavioural changes called out in CHANGELOG (fallback-overlap merge now sample-based; resampler-Last is now last-bar not max). |
 | 44 | Companion spread-detail CSV (per-bar spread analytics) | pending | for spread modelling in backtests |
 
 ## Session D — public-tool polish (later)

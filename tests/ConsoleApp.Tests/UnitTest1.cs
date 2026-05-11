@@ -91,6 +91,70 @@ public sealed class CoreTests
         Assert.Single(bars);
     }
 
+    [Theory]
+    [InlineData(SpreadMethod.Last, 9)]
+    [InlineData(SpreadMethod.Min, 1)]
+    [InlineData(SpreadMethod.Mean, 4)]    // (1+5+3+9)/4 = 4 (int truncation)
+    [InlineData(SpreadMethod.Median, 3)]  // sort -> [1,3,5,9]; lower-middle = 3
+    public void BarAggregator_AppliesSpreadMethodAcrossTicks(SpreadMethod method, int expectedSpread)
+    {
+        var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var end = start.AddMinutes(1);
+        var aggregator = new BarAggregator(
+            "m1", 5, TimeSpan.Zero, filterWeekends: false, start, end,
+            deduplicateTicks: false, skipFallbackIfTicked: true,
+            sessionCalendar: null, spreadMethod: method);
+
+        // bid stays at 1.10000; ask varies to produce spreads of 1, 5, 3, 9 points.
+        aggregator.AddTick(new Tick(start.AddSeconds(1),  1.10000, 1.10001, 1.0f, 1.0f));
+        aggregator.AddTick(new Tick(start.AddSeconds(10), 1.10000, 1.10005, 1.0f, 1.0f));
+        aggregator.AddTick(new Tick(start.AddSeconds(20), 1.10000, 1.10003, 1.0f, 1.0f));
+        aggregator.AddTick(new Tick(start.AddSeconds(30), 1.10000, 1.10009, 1.0f, 1.0f));
+
+        var bars = aggregator.GetBars();
+        Assert.Single(bars);
+        Assert.Equal(expectedSpread, bars[0].Spread);
+    }
+
+    [Fact]
+    public void BarAggregator_DefaultSpreadMethod_IsLast()
+    {
+        var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var end = start.AddMinutes(1);
+        // No spreadMethod passed → must default to Last (preserves pre-#43 behaviour).
+        var aggregator = new BarAggregator(
+            "m1", 5, TimeSpan.Zero, filterWeekends: false, start, end);
+
+        aggregator.AddTick(new Tick(start.AddSeconds(1),  1.10000, 1.10001, 1.0f, 1.0f));
+        aggregator.AddTick(new Tick(start.AddSeconds(30), 1.10000, 1.10007, 1.0f, 1.0f));
+
+        var bars = aggregator.GetBars();
+        Assert.Single(bars);
+        Assert.Equal(7, bars[0].Spread); // last tick's spread
+    }
+
+    [Theory]
+    [InlineData(SpreadMethod.Last, 9)]
+    [InlineData(SpreadMethod.Min, 1)]
+    [InlineData(SpreadMethod.Mean, 4)]
+    [InlineData(SpreadMethod.Median, 3)]
+    public void BarResampler_AppliesSpreadMethodAcrossBuckets(SpreadMethod method, int expectedSpread)
+    {
+        var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        // Four M1 bars in one M5 bucket, with spreads [1, 5, 3, 9].
+        var bars = new List<Bar>
+        {
+            new(start,                 1.1, 1.2, 1.0, 1.15, 10, 1, 0),
+            new(start.AddMinutes(1),   1.15, 1.25, 1.12, 1.22, 11, 5, 0),
+            new(start.AddMinutes(2),   1.22, 1.30, 1.18, 1.28, 12, 3, 0),
+            new(start.AddMinutes(3),   1.28, 1.35, 1.25, 1.32, 13, 9, 0),
+        };
+
+        var resampled = BarResampler.Resample(bars, 5, method);
+        Assert.Single(resampled);
+        Assert.Equal(expectedSpread, resampled[0].Spread);
+    }
+
     [Fact]
     public void BarResampler_AggregatesToFiveMinutes()
     {

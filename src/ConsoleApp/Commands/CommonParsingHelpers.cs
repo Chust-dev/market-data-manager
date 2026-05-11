@@ -383,4 +383,23 @@ internal static class CommonParsingHelpers
 
     public static string ParseTimeframe(IReadOnlyDictionary<string, string> args) =>
         args.GetValueOrDefault("timeframe", D.Timeframe);
+
+    /// <summary>
+    /// `--spread-method last|min|mean|median` for `export bars`. Selects
+    /// how per-tick spread samples are reduced to the single
+    /// <see cref="Models.Bar.Spread"/> value written into CSV/HST exports.
+    /// Default <see cref="HistoricalData.Export.SpreadMethod.Last"/>
+    /// preserves the historical behaviour (last tick of the minute, last
+    /// M1 bar of the higher-TF bucket). Unrecognised values fall back
+    /// to default.
+    /// </summary>
+    public static HistoricalData.Export.SpreadMethod ParseSpreadMethod(IReadOnlyDictionary<string, string> args) =>
+        args.GetValueOrDefault("spread-method")?.ToLowerInvariant() switch
+        {
+            "min" => HistoricalData.Export.SpreadMethod.Min,
+            "mean" => HistoricalData.Export.SpreadMethod.Mean,
+            "median" => HistoricalData.Export.SpreadMethod.Median,
+            "last" => HistoricalData.Export.SpreadMethod.Last,
+            _ => HistoricalData.Export.SpreadMethod.Last,
+        };
 }

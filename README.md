@@ -31,6 +31,7 @@ HistoricalData cache verify   [--instrument EURUSD] [--start ISO] [--end ISO]
 HistoricalData cache repair   [--instrument EURUSD] [--dry-run] [--trust-existing] [--quiet]
 HistoricalData cache cleanup  [--instrument EURUSD] [--dry-run] [--purge] [--quiet]
 HistoricalData export bars    --instrument EURUSD --start ... --end ... --timeframe m1
+                              [--spread-method last|min|mean|median]
 HistoricalData export ticks   --instrument EURUSD --start ... --end ...
 ```
 
@@ -169,6 +170,7 @@ After a successful run, output files are written to the `output` folder:
 - `--no-session-calendar` Disable session calendar filtering
 - `--session-config` Path to session calendar config
 - `--export-ticks` Also write per-month tick CSVs (MT5 import format). Requires `--mode ticks`.
+- `--spread-method` How per-tick spread samples are reduced into the bar's Spread column on `export bars`. One of `last` (default — last tick of the minute), `min`, `mean`, `median`. Also applied when resampling M1 → higher timeframes, reducing across M1 bars in each bucket.
 
 ### Tips
 
@@ -222,6 +224,7 @@ Run without arguments to be prompted for:
 --no-session-calendar
 --session-config ./src/ConsoleApp/Config/sessions.json
 --export-ticks
+--spread-method last|min|mean|median   (export bars: how spread samples are reduced)
 --no-prompt
 --verbose                   (subcommand mode; opt-in per-URL trace)
 --quiet                     (silences progress bar, banners, URL trace, summaries)

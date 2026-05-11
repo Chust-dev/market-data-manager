@@ -15,6 +15,7 @@ public sealed class BarAggregator
     private readonly bool _filterWeekends;
     private readonly bool _deduplicateTicks;
     private readonly bool _skipFallbackIfTicked;
+    private readonly SpreadMethod _spreadMethod;
     private readonly SessionConfig.SessionCalendar? _sessionCalendar;
     private readonly DateTimeOffset _startServer;
     private readonly DateTimeOffset _endServer;
@@ -28,7 +29,8 @@ public sealed class BarAggregator
         DateTimeOffset endUtc,
         bool deduplicateTicks = true,
         bool skipFallbackIfTicked = true,
-        SessionConfig.SessionCalendar? sessionCalendar = null)
+        SessionConfig.SessionCalendar? sessionCalendar = null,
+        SpreadMethod spreadMethod = SpreadMethod.Last)
     {
         Timeframe = timeframe;
         _digits = digits;
@@ -37,6 +39,7 @@ public sealed class BarAggregator
         _filterWeekends = filterWeekends;
         _deduplicateTicks = deduplicateTicks;
         _skipFallbackIfTicked = skipFallbackIfTicked;
+        _spreadMethod = spreadMethod;
         _sessionCalendar = sessionCalendar;
         _startServer = startUtc.ToOffset(utcOffset);
         _endServer = endUtc.ToOffset(utcOffset);
@@ -91,7 +94,7 @@ public sealed class BarAggregator
         if (!_bars.TryGetValue(minuteKey, out var builder))
         {
             var minuteTime = DateTimeOffset.FromUnixTimeSeconds(minuteKey * 60).ToOffset(_utcOffset);
-            builder = new BarBuilder(minuteTime, _scale);
+            builder = new BarBuilder(minuteTime, _scale, _spreadMethod);
             _bars[minuteKey] = builder;
         }
 
@@ -136,7 +139,7 @@ public sealed class BarAggregator
         if (!_bars.TryGetValue(minuteKey, out var builder))
         {
             var minuteTime = DateTimeOffset.FromUnixTimeSeconds(minuteKey * 60).ToOffset(_utcOffset);
-            builder = new BarBuilder(minuteTime, _scale);
+            builder = new BarBuilder(minuteTime, _scale, _spreadMethod);
             _bars[minuteKey] = builder;
         }
 
@@ -221,14 +224,13 @@ public sealed class BarAggregator
         private double _close;
         private long _tickVolume;
         private long _realVolume;
-        private int _spread;
-        private double _lastBid;
-        private double _lastAsk;
+        private SpreadAccumulator _spread;
 
-        public BarBuilder(DateTimeOffset time, double scale)
+        public BarBuilder(DateTimeOffset time, double scale, SpreadMethod spreadMethod)
         {
             _time = time;
             _scale = scale;
+            _spread = new SpreadAccumulator(spreadMethod);
         }
 
         public void AddTick(Tick tick, DateTimeOffset serverTime)
@@ -249,11 +251,9 @@ public sealed class BarAggregator
                 _close = price;
             }
 
-            _lastBid = tick.Bid;
-            _lastAsk = tick.Ask;
             _tickVolume++;
             _realVolume += (long)Math.Round(tick.BidVolume + tick.AskVolume);
-            _spread = (int)Math.Round((_lastAsk - _lastBid) * _scale);
+            _spread.Add((int)Math.Round((tick.Ask - tick.Bid) * _scale));
         }
 
         public void MergeBar(Bar bar)
@@ -275,7 +275,10 @@ public sealed class BarAggregator
 
             _tickVolume += bar.Volume;
             _realVolume += bar.RealVolume;
-            _spread = Math.Max(_spread, bar.Spread);
+            // Feed the fallback-bar spread as one additional sample. When
+            // `_skipFallbackIfTicked` is on (default), this only runs in
+            // pure-fallback minutes — one sample, any method returns it.
+            _spread.Add(bar.Spread);
         }
 
         public Bar Build(int digits)
@@ -287,7 +290,7 @@ public sealed class BarAggregator
                 Math.Round(_low, digits),
                 Math.Round(_close, digits),
                 _tickVolume,
-                _spread,
+                _spread.Build(),
                 _realVolume
             );
         }
