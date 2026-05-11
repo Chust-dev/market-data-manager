@@ -238,6 +238,7 @@ public static class Program
         return (args[0].ToLowerInvariant(), args.Length > 1 ? args[1].ToLowerInvariant() : "") switch
         {
             ("cache", "audit") => new CacheAuditCommand(),
+            ("cache", "size") => new CacheSizeCommand(),
             ("cache", "update") => new CacheUpdateCommand(),
             ("cache", "catchup") => new CacheCatchupCommand(),
             ("cache", "discover") => new CacheDiscoverCommand(),
@@ -248,6 +249,28 @@ public static class Program
             ("export", "ticks") => new ExportTicksCommand(),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Drives `cache size` — measures per-symbol (and optionally
+    /// per-(symbol, year)) disk usage of the .bi5 cache and renders a
+    /// sorted text table. CSV / file output is a planned follow-up.
+    /// </summary>
+    internal static int RunSize(CacheSizeOptions options)
+    {
+        var poolPath = PathUtils.NormalizePath(options.PoolPath);
+        var sizer = new CacheSizer(poolPath);
+        var symbolDirs = sizer.PlanSymbols(options.InstrumentFilter);
+        var report = sizer.MeasureAll(symbolDirs);
+
+        if (!report.PoolExists)
+        {
+            Console.WriteLine($"Pool path does not exist: {poolPath}");
+            return 1;
+        }
+
+        Console.Write(options.ByYear ? report.RenderByYear(options.SortBy) : report.Render(options.SortBy));
+        return 0;
     }
 
     internal static int RunAudit(CacheAuditOptions options)
@@ -507,6 +530,8 @@ public static class Program
         Console.WriteLine("  cache audit    [--instrument SYM] [--by-year] [--by-month | --no-by-month]");
         Console.WriteLine("                 Inspect the cache: file counts, coverage, disk usage.");
         Console.WriteLine("                 --by-year / --by-month add finer-grained coverage grids; month is auto-included for single-symbol audits.");
+        Console.WriteLine("  cache size     [--instrument SYM] [--by-year] [--sort size|symbol|year|files]");
+        Console.WriteLine("                 Disk-usage breakdown by symbol (and optionally year). Sorted by --sort (default: size, largest first).");
         Console.WriteLine("  cache verify   [--instrument SYM] [--start ISO] [--end ISO]");
         Console.WriteLine("                 [--remote [--size-only] [--parallel N]] [--quiet]");
         Console.WriteLine("                 Recompute SHA-256 vs sidecar (local) and optionally probe Dukascopy for drift.");

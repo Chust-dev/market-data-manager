@@ -19,6 +19,7 @@ public sealed class SubcommandRoutingTests
     [InlineData("cache", "verify", typeof(CacheVerifyCommand))]
     [InlineData("cache", "repair", typeof(CacheRepairCommand))]
     [InlineData("cache", "cleanup", typeof(CacheCleanupCommand))]
+    [InlineData("cache", "size", typeof(CacheSizeCommand))]
     [InlineData("export", "bars", typeof(ExportBarsCommand))]
     [InlineData("export", "ticks", typeof(ExportTicksCommand))]
     public void ResolveCommand_KnownVerbs_ReturnsMatchingCommand(string verb1, string verb2, Type expected)
@@ -76,6 +77,7 @@ public sealed class SubcommandRoutingTests
         Assert.IsAssignableFrom<ICommand>(new CacheVerifyCommand());
         Assert.IsAssignableFrom<ICommand>(new CacheRepairCommand());
         Assert.IsAssignableFrom<ICommand>(new CacheCleanupCommand());
+        Assert.IsAssignableFrom<ICommand>(new CacheSizeCommand());
         Assert.IsAssignableFrom<ICommand>(new ExportBarsCommand());
         Assert.IsAssignableFrom<ICommand>(new ExportTicksCommand());
     }

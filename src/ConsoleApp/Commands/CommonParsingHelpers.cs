@@ -154,6 +154,25 @@ internal static class CommonParsingHelpers
         args.ContainsKey("size-only");
 
     /// <summary>
+    /// `--sort size|symbol|year|files` for `cache size`. Default
+    /// <see cref="HistoricalData.Manage.CacheSizeSort.Size"/> — the most
+    /// common question ("where's my disk space going?") answered with
+    /// largest-first ordering. Unrecognised values fall back to default.
+    /// </summary>
+    public static HistoricalData.Manage.CacheSizeSort ParseCacheSizeSort(IReadOnlyDictionary<string, string> args)
+    {
+        var value = args.GetValueOrDefault("sort");
+        return value?.ToLowerInvariant() switch
+        {
+            "symbol" => HistoricalData.Manage.CacheSizeSort.Symbol,
+            "year" => HistoricalData.Manage.CacheSizeSort.Year,
+            "files" => HistoricalData.Manage.CacheSizeSort.Files,
+            "size" => HistoricalData.Manage.CacheSizeSort.Size,
+            _ => HistoricalData.Manage.CacheSizeSort.Size,
+        };
+    }
+
+    /// <summary>
     /// `--start ISO` as a nullable UTC date — null when the flag is absent
     /// or unparseable. Differs from <see cref="ParseStartEnd"/>, which
     /// always returns a value (defaulted from <see cref="AppOptions"/>).

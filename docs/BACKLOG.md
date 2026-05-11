@@ -32,7 +32,7 @@ re-downloading everything.
 | 20 | `cache repair` — auto-fix corrupt files | done | refetch via DukascopyClient, or regenerate sidecar with `--trust-existing`; `--dry-run` previews |
 | 21 | `cache cleanup` — remove zero-byte / orphan files | done | deletes by default; `--dry-run` previews; prunes empty parent dirs; preserves symbol root |
 | 22 | `cache add-symbol` / `cache remove-symbol` | pending | manage `instruments.json.digits` from CLI |
-| 23 | `cache size` — enhanced size breakdown (per-year, sortable) | pending | output formats: text table, csv |
+| 23 | `cache size` — enhanced size breakdown (per-year, sortable) | partial | text output shipped (per-symbol totals + `--by-year` long format, `--sort size\|symbol\|year\|files`, non-symbol-dir filter via #52); CSV / `--output PATH` deferred to a follow-up |
 | 52 | Filter non-symbol subfolders out of cache audit (`Exports` leaking in) | done | structural check: subdir must contain at least one 4-digit-year child |
 | 53 | Remove vestigial cache-only mode after Manage pillar lands | done | dropped the `--audit` legacy flag + `AppOptions.Audit` field; `cache audit` subcommand is the only path now |
 | 54 | Discover: distinguish transient error from clean not-available | done | DiscoveryResult.IsTransient flag + DiscoveryMerge.TryApply policy; transient failures don't overwrite existing entries |
@@ -63,6 +63,7 @@ adds discoverability, and cleans up cosmetic papercuts.
 | 51 | Differentiated output for single-symbol vs multi-symbol runs | pending | suppress per-symbol headers when only one |
 | 56 | Fix duplicate ProgressBar render on Ctrl+C cancel | pending | cosmetic, ~15 lines |
 | 57 | Redesign `cache audit --by-year` layout for wide pools | pending | 23 years × 29 symbols at ~7 chars per cell is ~200 cols wide and wraps awkwardly. Options on the table: compact unicode heatmap (1 char/year), chunked 8-year pages, per-symbol gap summary, CSV output. User deferred decision. |
+| 58 | `cache size --csv` / `--output PATH` follow-up | pending | Text version of #23 shipped without CSV; add `--csv` flag to emit machine-readable rows (integer bytes, Symbol[,Year],SizeBytes,Files) and `--output PATH` to write to a file instead of stdout |
 
 ## Release
 
