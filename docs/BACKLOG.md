@@ -34,7 +34,7 @@ re-downloading everything.
 | 22 | `cache add-symbol` / `cache remove-symbol` | pending | manage `instruments.json.digits` from CLI |
 | 23 | `cache size` — enhanced size breakdown (per-year, sortable) | pending | output formats: text table, csv |
 | 52 | Filter non-symbol subfolders out of cache audit (`Exports` leaking in) | done | structural check: subdir must contain at least one 4-digit-year child |
-| 53 | Remove vestigial cache-only mode after Manage pillar lands | pending | cleanup |
+| 53 | Remove vestigial cache-only mode after Manage pillar lands | done | dropped the `--audit` legacy flag + `AppOptions.Audit` field; `cache audit` subcommand is the only path now |
 | 54 | Discover: distinguish transient error from clean not-available | done | DiscoveryResult.IsTransient flag + DiscoveryMerge.TryApply policy; transient failures don't overwrite existing entries |
 | 55 | Wire ProgressBar into PoolAuditor and Exporters | deferred | Manage pillar deferred — `cache audit` runs in seconds and `cache discover`'s per-symbol streaming output is already the right progress UI; a bar would conflict with it. Exporters may be revisited as a separate concern later. |
 

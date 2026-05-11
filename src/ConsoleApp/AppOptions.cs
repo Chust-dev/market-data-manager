@@ -49,7 +49,6 @@ public sealed record AppOptions(
     string SessionConfigPath,
     bool NonInteractive,
     bool ExportTicks,
-    bool Audit,
     bool Quiet
 )
 {
@@ -83,7 +82,6 @@ public sealed record AppOptions(
         SessionConfigPath: "./src/ConsoleApp/Config/sessions.json",
         NonInteractive: false,
         ExportTicks: false,
-        Audit: false,
         Quiet: false
     );
 
@@ -144,7 +142,6 @@ public sealed record AppOptions(
         }
 
         var exportTicks = GetBool(args, "export-ticks", d.ExportTicks);
-        var audit = GetBool(args, "audit", d.Audit);
 
         return d with
         {
@@ -175,7 +172,6 @@ public sealed record AppOptions(
             SessionConfigPath = sessionConfigPath,
             NonInteractive = nonInteractive,
             ExportTicks = exportTicks,
-            Audit = audit,
             Quiet = quiet
         };
     }

@@ -166,7 +166,6 @@ After a successful run, output files are written to the `output` folder:
 - `--no-session-calendar` Disable session calendar filtering
 - `--session-config` Path to session calendar config
 - `--export-ticks` Also write per-month tick CSVs (MT5 import format). Requires `--mode ticks`.
-- `--audit` Inspect the data pool and print a coverage summary; no download is performed.
 
 ### Tips
 
@@ -220,7 +219,6 @@ Run without arguments to be prompted for:
 --no-session-calendar
 --session-config ./src/ConsoleApp/Config/sessions.json
 --export-ticks
---audit
 --no-prompt
 --verbose                   (subcommand mode; opt-in per-URL trace)
 --quiet                     (silences progress bar, banners, URL trace, summaries)
@@ -298,7 +296,7 @@ After downloads have populated `D:\MarketData` (or whatever `--pool` you used),
 you can inspect what's there without re-downloading:
 
 ```text
-dotnet run --project src/ConsoleApp/HistoricalData.csproj -- --audit
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- cache audit
 ```
 
 This walks the pool directory, counts cached `.bi5` files per symbol, computes
