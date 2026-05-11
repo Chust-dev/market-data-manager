@@ -62,6 +62,7 @@ adds discoverability, and cleans up cosmetic papercuts.
 | 39 | Package as dotnet tool for cross-platform install | pending | `dotnet tool install -g HistoricalData.cli` |
 | 51 | Differentiated output for single-symbol vs multi-symbol runs | pending | suppress per-symbol headers when only one |
 | 56 | Fix duplicate ProgressBar render on Ctrl+C cancel | pending | cosmetic, ~15 lines |
+| 57 | Redesign `cache audit --by-year` layout for wide pools | pending | 23 years × 29 symbols at ~7 chars per cell is ~200 cols wide and wraps awkwardly. Options on the table: compact unicode heatmap (1 char/year), chunked 8-year pages, per-symbol gap summary, CSV output. User deferred decision. |
 
 ## Release
 
