@@ -35,7 +35,7 @@ re-downloading everything.
 | 23 | `cache size` — enhanced size breakdown (per-year, sortable) | pending | output formats: text table, csv |
 | 52 | Filter non-symbol subfolders out of cache audit (`Exports` leaking in) | done | structural check: subdir must contain at least one 4-digit-year child |
 | 53 | Remove vestigial cache-only mode after Manage pillar lands | pending | cleanup |
-| 54 | Discover: distinguish transient error from clean not-available | pending | Session A papercut, see Known Issues |
+| 54 | Discover: distinguish transient error from clean not-available | done | DiscoveryResult.IsTransient flag + DiscoveryMerge.TryApply policy; transient failures don't overwrite existing entries |
 | 55 | Wire ProgressBar into PoolAuditor and Exporters | deferred | Manage pillar deferred — `cache audit` runs in seconds and `cache discover`'s per-symbol streaming output is already the right progress UI; a bar would conflict with it. Exporters may be revisited as a separate concern later. |
 
 ## Session C — trading-relevant (later)
@@ -118,9 +118,9 @@ Out of scope for the v0.1.0 push but not abandoned.
 
 Documented in `CHANGELOG.md` under "Known issues (parked from Session A)".
 
-- **#54** — `cache discover` writes `null` for both clean-not-available
-  and transient HTTP errors; idempotent skip then prevents retry.
-  Workaround: `--refresh`.
+- ~~**#54** — `cache discover` writes `null` for both clean-not-available
+  and transient HTTP errors~~ → **fixed** in Session B (`DiscoveryResult.IsTransient`
+  + `DiscoveryMerge.TryApply`).
 - **#56** — duplicate ProgressBar render on Ctrl+C. Cosmetic.
 - ~~**#52** — `Exports` folder appears as a symbol in cache audit output~~
   → **fixed** in Session B (`LooksLikeSymbolDir` structural filter).

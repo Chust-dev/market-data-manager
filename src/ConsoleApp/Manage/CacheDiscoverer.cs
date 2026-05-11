@@ -47,10 +47,17 @@ public sealed class CacheDiscoverer
         probes += sanity.Probes;
         if (!sanity.HasData)
         {
+            // Distinguish a clean "Dukascopy doesn't have this symbol" (every
+            // sanity probe returned 404) from "we couldn't reach Dukascopy
+            // right now" (5xx, timeout, etc.). The caller uses IsTransient to
+            // decide whether to overwrite the persisted entry: clean not-
+            // available is a real result to persist; a transient error means
+            // any existing entry is more trustworthy than the failure.
             return new DiscoveryResult(
                 Earliest: null,
                 Probes: probes,
-                Note: sanity.HadTransientError ? "transient error" : "not available");
+                Note: sanity.HadTransientError ? "transient error" : "not available",
+                IsTransient: sanity.HadTransientError);
         }
 
         // Step 2: binary search [since.Date, sanityDay] for the earliest
@@ -92,7 +99,8 @@ public sealed class CacheDiscoverer
         return new DiscoveryResult(
             Earliest: bestKnown,
             Probes: probes,
-            Note: null);
+            Note: null,
+            IsTransient: false);
     }
 
     /// <summary>
@@ -137,8 +145,58 @@ public sealed class CacheDiscoverer
 /// symbol is unavailable on the source. <see cref="Probes"/> is purely
 /// diagnostic. <see cref="Note"/> carries human-readable status for
 /// the unavailable / transient cases.
+///
+/// <see cref="IsTransient"/> is the machine-readable counterpart to a
+/// "transient error" <see cref="Note"/>: when true, the failure was
+/// network-shaped (5xx, timeout, etc.) rather than a clean "Dukascopy
+/// doesn't have this symbol" 404. Callers use this flag to decide
+/// whether to overwrite a previously-persisted entry — see
+/// <see cref="DiscoveryMerge.TryApply"/> for the merge policy.
 /// </summary>
 public sealed record DiscoveryResult(
     DateTimeOffset? Earliest,
     int Probes,
-    string? Note);
+    string? Note,
+    bool IsTransient);
+
+/// <summary>
+/// Pure merge policy for applying a <see cref="DiscoveryResult"/> to the
+/// persistent <c>earliest</c> dictionary stored in <c>instruments.json</c>.
+/// Lives outside <c>CacheDiscoverCommand</c> so the policy can be unit
+/// tested without dragging in the network / file-IO that the command
+/// performs.
+/// </summary>
+public static class DiscoveryMerge
+{
+    /// <summary>
+    /// Merge a result for one symbol into the persistent earliest map.
+    /// Returns <c>true</c> if the map was written; <c>false</c> if the
+    /// result was a transient network failure and the existing entry
+    /// (if any) was preserved.
+    ///
+    /// Rationale:
+    ///   * Transient errors mean we couldn't reach Dukascopy this time —
+    ///     any prior entry is more trustworthy than the failure.
+    ///   * Clean "not available" 404s ARE a real result (the symbol isn't
+    ///     on Dukascopy) and should be persisted as null so the
+    ///     idempotent-skip filter on subsequent runs doesn't keep retrying.
+    ///   * Successes write the discovered earliest date.
+    /// </summary>
+    public static bool TryApply(
+        IDictionary<string, DateTimeOffset?> earliest,
+        string symbol,
+        DiscoveryResult result)
+    {
+        ArgumentNullException.ThrowIfNull(earliest);
+        ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
+        ArgumentNullException.ThrowIfNull(result);
+
+        if (result.IsTransient)
+        {
+            return false;
+        }
+
+        earliest[symbol] = result.Earliest;
+        return true;
+    }
+}

@@ -89,6 +89,7 @@ public sealed class CacheDiscoverCommand : ICommand
         var until = DateTimeOffset.UtcNow;
         var resultsLock = new object();
         var canceled = false;
+        var transientSkipped = 0;
 
         try
         {
@@ -114,7 +115,13 @@ public sealed class CacheDiscoverCommand : ICommand
                     // serialize the write so we don't trip the dictionary's invariants.
                     lock (resultsLock)
                     {
-                        instrumentConfig.Earliest[symbol] = result.Earliest;
+                        // DiscoveryMerge.TryApply encapsulates the transient-skip
+                        // policy: returns false (no write) when the result was a
+                        // network failure, preserving whatever prior entry exists.
+                        if (!DiscoveryMerge.TryApply(instrumentConfig.Earliest, symbol, result))
+                        {
+                            transientSkipped++;
+                        }
                     }
 
                     if (!options.Quiet)
@@ -159,6 +166,13 @@ public sealed class CacheDiscoverCommand : ICommand
             Console.WriteLine(canceled
                 ? $"Canceled. Saved {savedCount} earliest entries to {savePath}."
                 : $"Wrote {savedCount} earliest entries to {savePath}.");
+
+            if (transientSkipped > 0)
+            {
+                Console.WriteLine(
+                    $"  {transientSkipped} symbol(s) had transient errors and were left unchanged " +
+                    "(re-run later with --refresh to retry).");
+            }
         }
 
         return canceled ? 130 : 0;

@@ -4,6 +4,8 @@
 
 ### Session B — Manage pillar build-out
 
+- Fixed `cache discover` clobbering `instruments.json` on transient errors (BACKLOG #54). Previously the command wrote `instrumentConfig.Earliest[symbol] = result.Earliest` regardless of why the probe returned null — clean "Dukascopy doesn't have this symbol" 404s and transient network failures (5xx / timeouts) both produced a null Earliest, and both were persisted. A rate-limit storm during `cache discover --symbols all --refresh` could therefore overwrite an entire pool of valid earliest dates with nulls. Now: `DiscoveryResult` gains a machine-readable `IsTransient` flag (set in the sanity-probe-fail branch when at least one probe was a non-404 failure); a new pure helper `DiscoveryMerge.TryApply` encapsulates the merge policy ("write on success or clean-not-available, skip on transient"); `CacheDiscoverCommand` calls into it and reports a count of transient-skipped symbols at end of run. Idempotent re-runs still retry transient-failed symbols automatically because they stay out of the persisted dict (or keep their prior valid entry). 8 new tests on the new `DiscoveryMergeTests` cover all four edge cases (transient vs prior valid, prior null, absent symbol, vs delisted-overwrite) plus the success path and null-argument guards.
+
 - Fixed non-symbol directories leaking into `cache audit` output (BACKLOG #52): the pool walker now skips any subdirectory that doesn't contain at least one 4-digit-year child. Previously `Exports/` (nested inside the user's `D:\MarketData` pool by default), `.git`-style metadata folders, and stray temp dirs all showed up as bogus symbols with zero coverage in audit / `--by-year` / `--by-month` output. Fix is purely structural — no dependency on `instruments.json.digits`, so symbols the user is tracking but hasn't curated yet still register. The sibling Manage-pillar classes (`CacheVerifier`, `CacheCleaner`, `CacheRepairer`) were already immune (they only emit per-file results), so no change needed there. 4 new tests cover Exports-style neighbours, junk neighbours with no year structure, empty year subdirs (still a valid symbol), and 2-digit-year-like subdirs that shouldn't match.
 
 
@@ -26,7 +28,7 @@
 
 ### Known issues (parked from Session A)
 
-- `cache discover` conflates clean "not available" responses with transient HTTP errors and writes both as `null` in `instruments.json`. The idempotent skip filter then permanently treats the symbol as unavailable until `--refresh` is passed. Workaround: re-run with `--refresh`. Fix planned post-Session-A.
+- ~~`cache discover` conflates clean "not available" responses with transient HTTP errors~~ — **fixed in Session B (BACKLOG #54)**: `DiscoveryResult.IsTransient` + `DiscoveryMerge.TryApply` policy. Transient failures no longer overwrite existing entries.
 - A duplicate progress bar line can appear on Ctrl+C when cancelling mid-run. Cosmetic only; the underlying cancellation path is correct.
 
 ### Session A — weekly workflow ready
