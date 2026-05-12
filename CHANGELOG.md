@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## v0.1.0 - 2026-05-12
+
+First public release. The CLI surface is now stable across the three pillars (Download, Manage, Export); the legacy flat-flag invocation form was removed; the binary packs as a .NET global tool. Future v0.1.x patches follow semver; v0.2.0 is the next minor.
+
+**Highlights for new users**:
+
+- Subcommand CLI: `cache update | catchup | discover | audit | size | add-symbol | remove-symbol | verify | repair | cleanup`, `export bars | ticks`. See README "Typical workflows" for end-to-end recipes.
+- DST-aware broker offset (`--broker ic-markets`) on `export bars` / `export ticks` — single export across a DST transition produces correctly-stamped server-local bars on both sides without manual `--offset` flipping.
+- Configurable spread aggregation (`--spread-method last | min | mean | median`) on `export bars` — applied at both the per-tick M1 aggregation stage and the M1 → higher-TF resample stage. Default `last` preserves byte-identical behaviour vs pre-flag exports at the M1 layer.
+- Local cache verification (`cache verify`) and source-side drift detection (`cache verify --remote`) catch silent corruption and Dukascopy amendments before they reach a backtest.
+- Per-session worktree polish: `=== SYM ===` per-symbol header and `Batch summary:` block now suppressed on single-symbol runs (UX cleaner; multi-symbol output unchanged).
+- Packaged as a .NET global tool — `dotnet pack -c Release` + `dotnet tool install -g HistoricalData.cli --add-source <nupkg-folder>` makes the `historicaldata` command system-wide. NuGet.org publish deferred to a later release.
+
+**Known issues (shipping)**:
+
+- #56 — duplicate `ProgressBar` render on Ctrl+C cancel. Cosmetic only; the underlying cancellation path is correct. Tracked in BACKLOG for a future patch release.
+
+**Breaking changes**:
+
+- The legacy flat-flag CLI (`--instrument X --start Y --timeframe TF ...`) and its interactive-prompt mode (running with no args) were removed. Scripts must migrate to the subcommand form. The most common mapping: `cache update --instrument X --start Y --end Z` for the download step, then `export bars --instrument X --start Y --end Z --timeframe TF` for the export step.
+
 ### Session D — public-tool polish
 
 - Packaged the CLI as a .NET global tool (BACKLOG #39). The `HistoricalData.csproj` now sets `<PackAsTool>true</PackAsTool>` with `<ToolCommandName>historicaldata</ToolCommandName>` and NuGet metadata (PackageId `HistoricalData.cli`, version 0.1.0, repository URL, description, tags). After `dotnet pack -c Release`, the resulting `HistoricalData.cli.0.1.0.nupkg` installs system-wide via `dotnet tool install -g HistoricalData.cli --add-source <path-to-nupkg-folder>` and the global command `historicaldata` becomes invocable from any directory. NuGet.org publishing intentionally deferred until a later release — installation is local-only from the packed nupkg for v0.1.0. README gains an "Option C: Install as a Global dotnet Tool" section documenting the pack → install → run flow plus upgrade and uninstall commands.
