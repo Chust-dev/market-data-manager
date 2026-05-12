@@ -56,7 +56,6 @@ adds discoverability, and cleans up cosmetic papercuts.
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 18 | Weekly catch-up wrapper script (`update.ps1`) | pending | double-clickable; calls `cache catchup --symbols all --no-prompt --quiet` |
-| 19 | Dry-run / size estimate (`--dry-run`) | pending | for `cache update`; predicts download volume |
 | 38 | Remove legacy flat-flag CLI; subcommands become the only path | pending | breaking change; locks in v0.1.0 |
 | 39 | Package as dotnet tool for cross-platform install | pending | `dotnet tool install -g HistoricalData.cli` |
 | 51 | Differentiated output for single-symbol vs multi-symbol runs | pending | suppress per-symbol headers when only one |
@@ -83,6 +82,7 @@ Out of scope for the v0.1.0 push but not abandoned.
 | 25 | Per-symbol log files for multi-symbol runs | Wait for #11 first |
 | 26 | Configurable retry policy (`--max-retries`, `--backoff-base`) | Default policy works fine |
 | 40 | Darwinex as a second tick data source | Major architectural addition; speculative |
+| 19 | Dry-run / size estimate (`--dry-run` for `cache update`) | User declined on 2026-05-12: doesn't want a pre-flight estimate. The real `cache update` run already shows live ProgressBar with file counts and ETA, so a separate dry-run mode doesn't add information that isn't visible mid-run. The download-volume question is answered better by running once and watching the bar. |
 
 ## Parked — Manage
 
