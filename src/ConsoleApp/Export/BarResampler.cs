@@ -5,7 +5,7 @@ namespace HistoricalData.Export;
 
 public static class BarResampler
 {
-    public static IReadOnlyList<Bar> Resample(IReadOnlyList<Bar> bars, TimeframeInfo timeframe)
+    public static IReadOnlyList<Bar> Resample(IReadOnlyList<Bar> bars, TimeframeInfo timeframe, SpreadMethod spreadMethod = SpreadMethod.Last)
     {
         if (timeframe.Minutes <= 1 || bars.Count == 0)
         {
@@ -15,6 +15,7 @@ public static class BarResampler
         var result = new List<Bar>();
         Bar? current = null;
         DateTimeOffset currentBucket = default;
+        var spreadAcc = new SpreadAccumulator(spreadMethod);
 
         var orderedBars = bars;
         if (!IsSorted(orderedBars))
@@ -30,9 +31,11 @@ public static class BarResampler
             {
                 if (current is not null)
                 {
-                    result.Add(current);
+                    result.Add(current with { Spread = spreadAcc.Get() });
                 }
 
+                spreadAcc = new SpreadAccumulator(spreadMethod);
+                spreadAcc.Add(bar.Spread);
                 currentBucket = bucket;
                 current = new Bar(
                     bucket,
@@ -46,28 +49,28 @@ public static class BarResampler
                 continue;
             }
 
+            spreadAcc.Add(bar.Spread);
             current = current with
             {
                 High = Math.Max(current.High, bar.High),
                 Low = Math.Min(current.Low, bar.Low),
                 Close = bar.Close,
                 Volume = current.Volume + bar.Volume,
-                Spread = Math.Max(current.Spread, bar.Spread),
                 RealVolume = current.RealVolume + bar.RealVolume
             };
         }
 
         if (current is not null)
         {
-            result.Add(current);
+            result.Add(current with { Spread = spreadAcc.Get() });
         }
 
         return result;
     }
 
-    public static IReadOnlyList<Bar> Resample(IReadOnlyList<Bar> bars, int timeframeMinutes)
+    public static IReadOnlyList<Bar> Resample(IReadOnlyList<Bar> bars, int timeframeMinutes, SpreadMethod spreadMethod = SpreadMethod.Last)
     {
-        return Resample(bars, new TimeframeInfo($"m{timeframeMinutes}", timeframeMinutes, TimeframeKind.FixedMinutes));
+        return Resample(bars, new TimeframeInfo($"m{timeframeMinutes}", timeframeMinutes, TimeframeKind.FixedMinutes), spreadMethod);
     }
 
     private static DateTimeOffset GetBucketStart(DateTimeOffset time, TimeframeInfo timeframe)

@@ -46,7 +46,7 @@ backtesting against a real broker setup.
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 15 | DST-aware broker offset (`--broker ic-markets`) | done | `BrokerOffset` type with `.Fixed(TimeSpan)` and `.IcMarkets` factories; US DST rule (2nd Sun Mar → 1st Sun Nov) hand-coded for platform portability; verified across both 2026 transitions; `--broker` and `--offset` mutually exclusive |
-| 43 | Configurable spread aggregation method (`--spread-method`) | pending | last / median / mean / min |
+| 43 | Configurable spread aggregation method (`--spread-method`) | done | `SpreadMethod` enum + `SpreadAccumulator` value type; method applied at BOTH M1 aggregation and M1→higher-TF resample; default `last` preserves legacy M1 byte-identical; mean rounds half-away-from-zero; negative spreads preserved as signed samples; fallback merge keeps `Math.Max` (Q3=3a — worst-case wins under `--allow-fallback-overlap`) |
 | 44 | Companion spread-detail CSV (per-bar spread analytics) | pending | for spread modelling in backtests |
 
 ## Session D — public-tool polish (later)

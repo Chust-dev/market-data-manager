@@ -103,6 +103,34 @@ internal static class CommonParsingHelpers
         return BrokerOffset.Fixed(TimeSpanParser.TryParse(offsetRaw, D.UtcOffset));
     }
 
+    /// <summary>
+    /// Resolve the spread-aggregation method for an export command from the
+    /// argMap. Accepts <c>--spread-method last|min|mean|median</c>
+    /// (case-insensitive). Default <see cref="SpreadMethod.Last"/> keeps
+    /// existing M1 exports byte-identical and gives last-sample semantics
+    /// at the resampler. Throws on an unrecognised value.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <c>--spread-method</c> is present but doesn't match a
+    /// known method (message lists the supported set).
+    /// </exception>
+    public static SpreadMethod ParseSpreadMethod(IReadOnlyDictionary<string, string> args)
+    {
+        if (!args.TryGetValue("spread-method", out var raw) || string.IsNullOrWhiteSpace(raw))
+        {
+            return SpreadMethod.Last;
+        }
+        return raw.Trim().ToLowerInvariant() switch
+        {
+            "last" => SpreadMethod.Last,
+            "min" => SpreadMethod.Min,
+            "mean" => SpreadMethod.Mean,
+            "median" => SpreadMethod.Median,
+            _ => throw new ArgumentException(
+                $"Unknown --spread-method '{raw}'. Supported: last, min, mean, median."),
+        };
+    }
+
     // -- Path parsers ---------------------------------------------------------
 
     public static string ParsePoolPath(IReadOnlyDictionary<string, string> args) =>

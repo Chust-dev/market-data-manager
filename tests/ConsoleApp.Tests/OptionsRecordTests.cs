@@ -194,6 +194,34 @@ public sealed class OptionsRecordTests
         Assert.Throws<ArgumentException>(() => BarExportOptions.FromArgs(args));
     }
 
+    [Fact]
+    public void BarExportOptions_SpreadMethod_DefaultsToLast()
+    {
+        var args = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(SpreadMethod.Last, BarExportOptions.FromArgs(args).Spread);
+    }
+
+    [Fact]
+    public void BarExportOptions_SpreadMethodMedian_Parses()
+    {
+        var args = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["spread-method"] = "MEDIAN"
+        };
+        Assert.Equal(SpreadMethod.Median, BarExportOptions.FromArgs(args).Spread);
+    }
+
+    [Fact]
+    public void BarExportOptions_UnknownSpreadMethod_Throws()
+    {
+        var args = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["spread-method"] = "bogus"
+        };
+        var ex = Assert.Throws<ArgumentException>(() => BarExportOptions.FromArgs(args));
+        Assert.Contains("last, min, mean, median", ex.Message);
+    }
+
     // -- TickExportOptions ---------------------------------------------------
 
     [Fact]

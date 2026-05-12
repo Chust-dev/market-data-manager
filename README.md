@@ -151,7 +151,9 @@ After a successful run, output files are written to the `output` folder:
 - `--timeframe` `m1|m5|m15|m30|h1|h4|h6|d1|w1|mn1|m<minutes>`
 - `--mode` `ticks` or `direct`
 - `--format` `csv` or `csv+hst`
-- `--offset` UTC offset (example: `+02:00`)
+- `--offset` UTC offset (example: `+02:00`). Mutually exclusive with `--broker`.
+- `--broker` DST-aware broker preset (example: `ic-markets`). Used by `export bars` / `export ticks` to derive the UTC→server-local offset per timestamp so a single export run spanning a DST transition produces correctly-stamped bars on both sides. Supported: `ic-markets` (GMT+2 winter / GMT+3 summer, US DST schedule). Mutually exclusive with `--offset`.
+- `--spread-method` How `export bars` aggregates per-tick spreads into each bar's `Spread` column: `last` (default, last tick's spread), `min` (best-case fill), `mean` (rounded half-away-from-zero), `median` (outlier-robust). Applied at both the M1 stage and the M1→higher-TF resample stage.
 - `--pool` Data pool cache folder
 - `--output` Output folder
 - `--recent-refresh-days` Refresh recent data window in days (default 30)
@@ -202,6 +204,8 @@ Run without arguments to be prompted for:
 --mode direct|ticks
 --format csv|csv+hst
 --offset +02:00
+--broker ic-markets               (export bars / export ticks; DST-aware; mutually exclusive with --offset)
+--spread-method last|min|mean|median   (export bars; default last; applied at M1 and resample stages)
 --pool /DataPool
 --output ./output
 --instruments ./src/ConsoleApp/Config/instruments.json
