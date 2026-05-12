@@ -16,7 +16,13 @@ namespace HistoricalData.Tests;
 /// access or a mocking layer that doesn't yet exist; meaningful tests for
 /// it would be a follow-up commit when we extract <c>DukascopyClient</c>
 /// behind an interface.
+///
+/// Lives in the "ConsoleOut" collection so it runs serially with other
+/// tests that redirect <c>Console.Out</c>; otherwise a concurrent
+/// console-capture test in another class can disrupt the pillar's
+/// status writes mid-run.
 /// </summary>
+[Collection("ConsoleOut")]
 public sealed class PillarSmokeTests : IDisposable
 {
     private readonly string _root;

@@ -58,7 +58,7 @@ adds discoverability, and cleans up cosmetic papercuts.
 | 18 | Weekly catch-up wrapper script (`update.ps1`) | pending | double-clickable; calls `cache catchup --symbols all --no-prompt --quiet` |
 | 38 | Remove legacy flat-flag CLI; subcommands become the only path | pending | breaking change; locks in v0.1.0 |
 | 39 | Package as dotnet tool for cross-platform install | pending | `dotnet tool install -g HistoricalData.cli` |
-| 51 | Differentiated output for single-symbol vs multi-symbol runs | pending | suppress per-symbol headers when only one |
+| 51 | Differentiated output for single-symbol vs multi-symbol runs | done | per-symbol `=== SYM ===` header and `Batch summary:` block suppressed when N=1; cancellation banner always prints regardless of count. Gated in all three pillars (BarExporter, TickExporter, Downloader) and the legacy flat-flag CLI in `Program.cs`. New `SingleSymbolOutputTests` capture stdout to pin the behaviour. |
 | 56 | Fix duplicate ProgressBar render on Ctrl+C cancel | pending | cosmetic, ~15 lines |
 | 57 | Redesign `cache audit --by-year` layout for wide pools | pending | 23 years × 29 symbols at ~7 chars per cell is ~200 cols wide and wraps awkwardly. Options on the table: compact unicode heatmap (1 char/year), chunked 8-year pages, per-symbol gap summary, CSV output. User deferred decision. |
 | 58 | `cache size --csv` / `--output PATH` follow-up | pending | Text version of #23 shipped without CSV; add `--csv` flag to emit machine-readable rows (integer bytes, Symbol[,Year],SizeBytes,Files) and `--output PATH` to write to a file instead of stdout |

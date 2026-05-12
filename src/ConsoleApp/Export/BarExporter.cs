@@ -86,6 +86,7 @@ internal sealed class BarExporter
         var failed = 0;
         var cancelled = 0;
         var digitsMapOverrides = Program.ParseDigitsMap(options.DigitsMap);
+        var multipleInstruments = requestedInstruments.Count > 1;
 
         foreach (var instrument in requestedInstruments)
         {
@@ -105,6 +106,7 @@ internal sealed class BarExporter
                     client, instrument, digits,
                     options, startUtc, endUtc,
                     timeframeInfo, outputPath, sessionCalendar,
+                    multipleInstruments,
                     cts.Token);
                 succeeded++;
             }
@@ -124,15 +126,23 @@ internal sealed class BarExporter
             }
         }
 
-        // 9. Batch summary
-        Console.WriteLine();
-        Console.WriteLine("Batch summary:");
-        Console.WriteLine($"  Requested: {requestedInstruments.Count}");
-        Console.WriteLine($"  Succeeded: {succeeded}");
-        Console.WriteLine($"  Failed:    {failed}");
+        // 9. Batch summary — only when more than one instrument was requested.
+        // For single-symbol runs the per-instrument Summary block already says
+        // whether it worked, so the Requested/Succeeded/Failed tally is noise.
+        if (multipleInstruments)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Batch summary:");
+            Console.WriteLine($"  Requested: {requestedInstruments.Count}");
+            Console.WriteLine($"  Succeeded: {succeeded}");
+            Console.WriteLine($"  Failed:    {failed}");
+            if (cancelled > 0)
+            {
+                Console.WriteLine($"  Cancelled: {cancelled}");
+            }
+        }
         if (cancelled > 0)
         {
-            Console.WriteLine($"  Cancelled: {cancelled}");
             Console.WriteLine();
             Console.WriteLine("Run cancelled — partial output committed. Re-run to resume.");
         }
@@ -156,10 +166,14 @@ internal sealed class BarExporter
         TimeframeInfo timeframeInfo,
         string outputPath,
         SessionConfig.SessionCalendar? sessionCalendar,
+        bool multipleInstruments,
         CancellationToken cancellationToken)
     {
-        Console.WriteLine();
-        Console.WriteLine($"=== {instrument} ===");
+        if (multipleInstruments)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"=== {instrument} ===");
+        }
 
         var summary = new SummaryReport();
         var aggregator = new BarAggregator(

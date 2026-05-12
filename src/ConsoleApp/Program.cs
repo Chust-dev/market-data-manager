@@ -109,6 +109,7 @@ public static class Program
         var failed = 0;
         var cancelled = 0;
         var digitsMapOverrides = ParseDigitsMap(options.DigitsMap);
+        var multipleInstruments = requestedInstruments.Count > 1;
         foreach (var instrument in requestedInstruments)
         {
             if (cts.IsCancellationRequested)
@@ -153,6 +154,7 @@ public static class Program
                     digits,
                     outputPath,
                     sessionCalendar,
+                    multipleInstruments,
                     cts.Token);
                 if (instrumentSummary)
                 {
@@ -182,14 +184,23 @@ public static class Program
             }
         }
 
-        Console.WriteLine();
-        Console.WriteLine("Batch summary:");
-        Console.WriteLine($"  Requested: {requestedInstruments.Count}");
-        Console.WriteLine($"  Succeeded: {succeeded}");
-        Console.WriteLine($"  Failed:    {failed}");
+        // Batch summary — only when more than one instrument was requested. For
+        // single-symbol runs the per-instrument Summary block already says
+        // whether it worked, so the Requested/Succeeded/Failed tally is noise.
+        if (multipleInstruments)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Batch summary:");
+            Console.WriteLine($"  Requested: {requestedInstruments.Count}");
+            Console.WriteLine($"  Succeeded: {succeeded}");
+            Console.WriteLine($"  Failed:    {failed}");
+            if (cancelled > 0)
+            {
+                Console.WriteLine($"  Cancelled: {cancelled}");
+            }
+        }
         if (cancelled > 0)
         {
-            Console.WriteLine($"  Cancelled: {cancelled}");
             Console.WriteLine();
             Console.WriteLine("Run cancelled — partial cache committed. Re-run to resume.");
         }
@@ -941,10 +952,14 @@ public static class Program
         int digits,
         string outputPath,
         SessionConfig.SessionCalendar? sessionCalendar,
+        bool multipleInstruments,
         CancellationToken cancellationToken)
     {
-        Console.WriteLine();
-        Console.WriteLine($"=== {options.Instrument} ===");
+        if (multipleInstruments)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"=== {options.Instrument} ===");
+        }
 
         var summary = new SummaryReport();
         var aggregator = new BarAggregator(

@@ -62,6 +62,7 @@ internal sealed class TickExporter
         var failed = 0;
         var cancelled = 0;
         var digitsMapOverrides = Program.ParseDigitsMap(options.DigitsMap);
+        var multipleInstruments = requestedInstruments.Count > 1;
 
         foreach (var instrument in requestedInstruments)
         {
@@ -76,7 +77,9 @@ internal sealed class TickExporter
                 await ExportTicksForInstrumentAsync(
                     client, instrument, digits,
                     options.Offset, outputPath,
-                    startUtc, endUtc, cts.Token);
+                    startUtc, endUtc,
+                    multipleInstruments,
+                    cts.Token);
                 succeeded++;
             }
             // Real user cancellation (Ctrl+C) — cts.Token was triggered.
@@ -95,15 +98,21 @@ internal sealed class TickExporter
             }
         }
 
-        // 8. Batch summary
-        Console.WriteLine();
-        Console.WriteLine("Batch summary:");
-        Console.WriteLine($"  Requested: {requestedInstruments.Count}");
-        Console.WriteLine($"  Succeeded: {succeeded}");
-        Console.WriteLine($"  Failed:    {failed}");
+        // 8. Batch summary — only when more than one instrument was requested.
+        if (multipleInstruments)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Batch summary:");
+            Console.WriteLine($"  Requested: {requestedInstruments.Count}");
+            Console.WriteLine($"  Succeeded: {succeeded}");
+            Console.WriteLine($"  Failed:    {failed}");
+            if (cancelled > 0)
+            {
+                Console.WriteLine($"  Cancelled: {cancelled}");
+            }
+        }
         if (cancelled > 0)
         {
-            Console.WriteLine($"  Cancelled: {cancelled}");
             Console.WriteLine();
             Console.WriteLine("Run cancelled — partial output committed. Re-run to resume.");
         }
@@ -124,10 +133,14 @@ internal sealed class TickExporter
         string outputPath,
         DateTimeOffset startUtc,
         DateTimeOffset endUtc,
+        bool multipleInstruments,
         CancellationToken cancellationToken)
     {
-        Console.WriteLine();
-        Console.WriteLine($"=== {instrument} ===");
+        if (multipleInstruments)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"=== {instrument} ===");
+        }
 
         using var writer = new TickCsvWriter(outputPath, instrument, digits, broker);
         var exportedTicks = await client.ExportTicksToCsvAsync(

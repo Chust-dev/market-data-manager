@@ -78,6 +78,7 @@ internal sealed class Downloader
         var failed = 0;
         var cancelled = 0;
         var digitsMapOverrides = Program.ParseDigitsMap(options.DigitsMap);
+        var multipleInstruments = requestedInstruments.Count > 1;
 
         foreach (var instrument in requestedInstruments)
         {
@@ -107,7 +108,9 @@ internal sealed class Downloader
 
                 await UpdateInstrumentCacheAsync(
                     client, instrument, digits,
-                    options, startUtc, endUtc, cts.Token);
+                    options, startUtc, endUtc,
+                    multipleInstruments,
+                    cts.Token);
                 succeeded++;
             }
             // Real user cancellation (Ctrl+C) — cts.Token was triggered.
@@ -128,15 +131,21 @@ internal sealed class Downloader
             }
         }
 
-        // 8. Batch summary
-        Console.WriteLine();
-        Console.WriteLine("Batch summary:");
-        Console.WriteLine($"  Requested: {requestedInstruments.Count}");
-        Console.WriteLine($"  Succeeded: {succeeded}");
-        Console.WriteLine($"  Failed:    {failed}");
+        // 8. Batch summary — only when more than one instrument was requested.
+        if (multipleInstruments)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Batch summary:");
+            Console.WriteLine($"  Requested: {requestedInstruments.Count}");
+            Console.WriteLine($"  Succeeded: {succeeded}");
+            Console.WriteLine($"  Failed:    {failed}");
+            if (cancelled > 0)
+            {
+                Console.WriteLine($"  Cancelled: {cancelled}");
+            }
+        }
         if (cancelled > 0)
         {
-            Console.WriteLine($"  Cancelled: {cancelled}");
             Console.WriteLine();
             Console.WriteLine("Run cancelled — partial cache committed. Re-run to resume.");
         }
@@ -162,10 +171,14 @@ internal sealed class Downloader
         CacheUpdateOptions options,
         DateTimeOffset startUtc,
         DateTimeOffset endUtc,
+        bool multipleInstruments,
         CancellationToken cancellationToken)
     {
-        Console.WriteLine();
-        Console.WriteLine($"=== {instrument} ===");
+        if (multipleInstruments)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"=== {instrument} ===");
+        }
 
         var totalHours = TimeRangeUtils.EnumerateHours(startUtc, endUtc).Count();
         var summary = new SummaryReport();
