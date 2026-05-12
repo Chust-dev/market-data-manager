@@ -146,6 +146,33 @@ dotnet run --project src/ConsoleApp/HistoricalData.csproj -- --help
 
 Running the binary with no arguments also prints the same help text and exits 1.
 
+### Option C: Install as a Global dotnet Tool
+
+The project is configured to pack as a [.NET global tool](https://learn.microsoft.com/dotnet/core/tools/global-tools).
+After building a `.nupkg` from source you can install it system-wide and
+invoke it as `historicaldata` from anywhere:
+
+```text
+# 1. Pack — produces .nupkg under src/ConsoleApp/bin/Release/
+dotnet pack src/ConsoleApp/HistoricalData.csproj -c Release
+
+# 2. Install globally
+dotnet tool install -g HistoricalData.cli \
+    --add-source src/ConsoleApp/bin/Release
+
+# 3. Run from anywhere
+historicaldata --help
+historicaldata cache audit --instrument EURUSD
+```
+
+To upgrade after a fresh `dotnet pack`: `dotnet tool update -g HistoricalData.cli --add-source ...`.
+To uninstall: `dotnet tool uninstall -g HistoricalData.cli`.
+
+NuGet.org publishing is not enabled for v0.1.0 — install locally from
+the packed `.nupkg` for now. A future release may publish to the public
+registry so `dotnet tool install -g HistoricalData.cli` works without
+the `--add-source` flag.
+
 ### Quick Start Example
 
 Fill the cache for one hour of EURUSD, then export it as M15 CSV:

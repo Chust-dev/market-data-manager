@@ -48,18 +48,18 @@ backtesting against a real broker setup.
 | 15 | DST-aware broker offset (`--broker ic-markets`) | done | `BrokerOffset` type with `.Fixed(TimeSpan)` and `.IcMarkets` factories; US DST rule (2nd Sun Mar → 1st Sun Nov) hand-coded for platform portability; verified across both 2026 transitions; `--broker` and `--offset` mutually exclusive |
 | 43 | Configurable spread aggregation method (`--spread-method`) | done | `SpreadMethod` enum + `SpreadAccumulator` value type; method applied at BOTH M1 aggregation and M1→higher-TF resample; default `last` preserves legacy M1 byte-identical; mean rounds half-away-from-zero; negative spreads preserved as signed samples; fallback merge keeps `Math.Max` (Q3=3a — worst-case wins under `--allow-fallback-overlap`) |
 
-## Session D — public-tool polish (closing for v0.1.0)
+## Session D — public-tool polish (complete; v0.1.0 ready to cut)
 
 Goal: prepare the tool for users who aren't us. Removes legacy cruft,
-adds discoverability, and cleans up cosmetic papercuts. Only **#39
-(package as dotnet tool)** remains before v0.1.0 cuts. #56 (duplicate
-ProgressBar render on Ctrl+C cancel) is a known cosmetic issue that
-ships as documented in the v0.1.0 release notes.
+adds discoverability, and cleans up cosmetic papercuts. All in-scope
+items done or parked. **#56 (duplicate ProgressBar render on Ctrl+C
+cancel)** is a known cosmetic issue that ships as documented in the
+v0.1.0 release notes.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 38 | Remove legacy flat-flag CLI; subcommands become the only path | done | deleted `AppOptions.FromArgs`, `RunDownloadFlow`, `RunInstrumentAsync`, `ConsolePrompts` (interactive mode), `OptionParsingTests`, plus the legacy fallback in `Program.Main`. Main now strictly dispatches subcommands and rejects unknown commands with a friendly error. README + CHANGELOG + `PrintHelp` updated to drop legacy mentions. Breaking change for any script still using the flat-flag form — they need to migrate to `cache update` / `export bars` / etc. |
-| 39 | Package as dotnet tool for cross-platform install | pending | `dotnet tool install -g HistoricalData.cli` |
+| 39 | Package as dotnet tool for cross-platform install | done | `<PackAsTool>` + tool metadata in `HistoricalData.csproj`; `dotnet pack` produces `HistoricalData.cli.0.1.0.nupkg`; users install via `dotnet tool install -g HistoricalData.cli --add-source <nupkg-folder>` and invoke as `historicaldata`. NuGet.org publishing intentionally deferred — install is local-only from the packed nupkg for v0.1.0. |
 | 51 | Differentiated output for single-symbol vs multi-symbol runs | done | per-symbol `=== SYM ===` header and `Batch summary:` block suppressed when N=1; cancellation banner always prints regardless of count. Gated in all three pillars (BarExporter, TickExporter, Downloader) and the legacy flat-flag CLI in `Program.cs`. New `SingleSymbolOutputTests` capture stdout to pin the behaviour. |
 | 56 | Fix duplicate ProgressBar render on Ctrl+C cancel | pending | cosmetic, ~15 lines |
 | 59 | `cache cleanup --purge --instrument SYM` | done | Closes the remove-symbol → reclaim-disk-space gap. Recursive delete of the symbol's pool subdirectory with `--dry-run` preview; path-traversal-safe; refuses without explicit symbol filter |

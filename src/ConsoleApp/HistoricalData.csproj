@@ -5,6 +5,25 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
+
+    <!-- Dotnet-tool packaging (BACKLOG #39). After dotnet pack, users
+         can install the resulting nupkg via the dotnet tool install command
+         with an explicit add-source flag pointing at the nupkg folder.
+         The global command name is `historicaldata`. NuGet.org publishing
+         is intentionally deferred until v0.1.1 (no public listing yet);
+         the tool can still be installed locally from the packed nupkg or
+         via a private feed by anyone who wants it. -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>historicaldata</ToolCommandName>
+    <PackageId>HistoricalData.cli</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Chust-dev</Authors>
+    <Description>CLI that downloads Dukascopy historical FX tick data, caches it locally as a reusable .bi5 pool, and projects it into MT5-compatible bar (CSV/HST) and tick (CSV) files. Subcommand surface: cache update/catchup/discover/audit/size/add-symbol/remove-symbol/verify/repair/cleanup, export bars, export ticks.</Description>
+    <RepositoryUrl>https://github.com/Chust-dev/market-data-manager</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/Chust-dev/market-data-manager</PackageProjectUrl>
+    <PackageTags>dukascopy;forex;fx;mt5;metatrader;historical-data;tick-data;cli;dotnet-tool</PackageTags>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
   <ItemGroup>
