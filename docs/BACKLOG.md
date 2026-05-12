@@ -55,7 +55,7 @@ adds discoverability, and cleans up cosmetic papercuts.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 38 | Remove legacy flat-flag CLI; subcommands become the only path | pending | breaking change; locks in v0.1.0 |
+| 38 | Remove legacy flat-flag CLI; subcommands become the only path | done | deleted `AppOptions.FromArgs`, `RunDownloadFlow`, `RunInstrumentAsync`, `ConsolePrompts` (interactive mode), `OptionParsingTests`, plus the legacy fallback in `Program.Main`. Main now strictly dispatches subcommands and rejects unknown commands with a friendly error. README + CHANGELOG + `PrintHelp` updated to drop legacy mentions. Breaking change for any script still using the flat-flag form — they need to migrate to `cache update` / `export bars` / etc. |
 | 39 | Package as dotnet tool for cross-platform install | pending | `dotnet tool install -g HistoricalData.cli` |
 | 51 | Differentiated output for single-symbol vs multi-symbol runs | done | per-symbol `=== SYM ===` header and `Batch summary:` block suppressed when N=1; cancellation banner always prints regardless of count. Gated in all three pillars (BarExporter, TickExporter, Downloader) and the legacy flat-flag CLI in `Program.cs`. New `SingleSymbolOutputTests` capture stdout to pin the behaviour. |
 | 56 | Fix duplicate ProgressBar render on Ctrl+C cancel | pending | cosmetic, ~15 lines |

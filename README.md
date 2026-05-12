@@ -15,8 +15,9 @@ CI runs `dotnet test` on Windows, macOS, and Linux for pull requests and pushes 
 ## Usage
 
 The CLI is organized as **subcommands** that separate cache maintenance from
-data export. The legacy flat-flag interface continues to work for existing
-scripts.
+data export. As of v0.1.0 the subcommand surface is the only entry point —
+the legacy flat-flag form (`--instrument X --start Y ...`) was removed; scripts
+that used it need to migrate to the verbs below.
 
 ```text
 HistoricalData cache update   --instrument EURUSD --start ... --end ...
@@ -99,10 +100,6 @@ The three pillars are independent: you can run any of them without the
 others, in any order. Cache update doesn't touch exports; exports never
 trigger downloads. Each subcommand calls exactly one pillar.
 
-The legacy flat-flag CLI (`--instrument X --start Y ...`) still works
-and continues to use a unified engine that combines all three pillars'
-work in one run. New scripts should use the subcommand syntax above.
-
 ## End User Guide (Setup and Run)
 
 ### Option A: Download a Release (recommended)
@@ -129,9 +126,25 @@ dotnet run --project src/ConsoleApp/HistoricalData.csproj
 
 ### Quick Start Example
 
+Fill the cache for one hour of EURUSD, then export it as M15 CSV:
+
 ```text
-dotnet run --project src/ConsoleApp/HistoricalData.csproj -- --instrument EURUSD --start 2025-01-01T00:00:00Z --end 2025-01-01T01:00:00Z --timeframe m15 --mode ticks --format csv --offset +00:00 --pool ./DataPool --output ./output --no-prompt
+# 1. Download the tick data for the range (writes nothing to ./output)
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- cache update \
+    --instrument EURUSD --start 2025-01-01T00:00:00Z --end 2025-01-01T01:00:00Z \
+    --pool ./DataPool --no-prompt
+
+# 2. Aggregate the cache into M15 bar CSV (no network calls)
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- export bars \
+    --instrument EURUSD --start 2025-01-01T00:00:00Z --end 2025-01-01T01:00:00Z \
+    --timeframe m15 --format csv \
+    --pool ./DataPool --output ./output --no-prompt
 ```
+
+The two-step pattern (cache update → export bars) is the v0.1.0 norm:
+`cache update` is the only command that touches the network; `export bars` /
+`export ticks` are pure cache reads and can be re-run as many times as you
+want at zero network cost.
 
 ### Output Files
 
@@ -177,19 +190,6 @@ After a successful run, output files are written to the `output` folder:
 - If you get a Windows SmartScreen warning, click “More info” → “Run anyway.”
 - Large date ranges take time; start with a short range to verify settings.
 - Use `--help` to list all options.
-
-### Interactive
-
-Run without arguments to be prompted for:
-
-- Instrument (default EURUSD)
-- Start / End (ISO 8601)
-- Timeframe (m1, m5, m15, m30, h1, h4, h6, d1, w1, mn1, or m<minutes>)
-- Download mode (default Tick->M1)
-- Output format (default CSV+HST)
-- UTC offset (default +00:00)
-- Data pool path (default /DataPool)
-- Output path (default ./output)
 
 ### CLI arguments
 
@@ -238,18 +238,34 @@ Run without arguments to be prompted for:
 
 ### Sample run
 
+Fill the cache for three days of EURUSD, then export M15 bars as CSV+HST:
+
 ```text
-dotnet run --project c:\sampleApp\HistoricalData\src\ConsoleApp\HistoricalData.csproj -- --instrument EURUSD --start 2025-01-01T00:00:00Z --end 2025-01-03T00:00:00Z --timeframe m15 --mode ticks --format csv+hst --offset +00:00 --pool /DataPool --output ./output --no-prompt
+# 1. Fill the cache (network)
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- cache update \
+    --instrument EURUSD --start 2025-01-01T00:00:00Z --end 2025-01-03T00:00:00Z \
+    --pool /DataPool --no-prompt
+
+# 2. Export M15 bars (offline)
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- export bars \
+    --instrument EURUSD --start 2025-01-01T00:00:00Z --end 2025-01-03T00:00:00Z \
+    --timeframe m15 --format csv+hst \
+    --pool /DataPool --output ./output --no-prompt
 ```
 
 ### Build new timeframes from cached ticks
 
-Yes. If tick files already exist in the data pool, you can generate a new timeframe without re-downloading by adding `--no-refresh`.
-
-Example (build M15 from cached ticks):
+`export bars` is cache-only — never touches the network. If tick files
+already exist in the data pool from an earlier `cache update`, you can
+generate any new timeframe just by re-running `export bars` with a
+different `--timeframe`:
 
 ```text
-dotnet run --project c:\sampleApp\HistoricalData\src\ConsoleApp\HistoricalData.csproj -- --instrument EURUSD --start 2025-01-01T00:00:00Z --end 2025-01-03T00:00:00Z --timeframe m15 --mode ticks --format csv+hst --offset +00:00 --pool /DataPool --output ./output --no-prompt --no-refresh
+# Same EURUSD cache, but as H1 bars this time
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- export bars \
+    --instrument EURUSD --start 2025-01-01T00:00:00Z --end 2025-01-03T00:00:00Z \
+    --timeframe h1 --format csv+hst \
+    --pool /DataPool --output ./output --no-prompt
 ```
 
 ## Config

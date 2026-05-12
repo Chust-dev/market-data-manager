@@ -1,5 +1,3 @@
-using HistoricalData.Utils;
-
 namespace HistoricalData;
 
 public enum DownloadMode
@@ -19,6 +17,18 @@ public enum OutputFormat
     None
 }
 
+/// <summary>
+/// Single-source-of-truth defaults for every option the app exposes via the
+/// subcommand CLI. Each <see cref="HistoricalData.Commands.Options"/> record
+/// reads its own defaults from <see cref="Defaults"/> via
+/// <see cref="HistoricalData.Commands.CommonParsingHelpers"/>, so a default
+/// edit here propagates to every subcommand without touching them.
+///
+/// The legacy flat-flag CLI parser (<c>FromArgs</c>) and interactive prompts
+/// were removed in v0.1.0; this type's role narrowed from "god-options record
+/// shared by every code path" to "default-value carrier for the typed
+/// per-command options records."
+/// </summary>
 public sealed record AppOptions(
     string Instrument,
     string Instruments,
@@ -67,7 +77,7 @@ public sealed record AppOptions(
         OutputPath: @"D:\MarketData\Exports",
         InstrumentsPath: "./src/ConsoleApp/Config/instruments.json",
         HttpConfigPath: "./src/ConsoleApp/Config/http.json",
-        Verbose: true,
+        Verbose: false,
         FilterWeekends: true,
         FallbackToM1: true,
         RefreshCache: true,
@@ -84,119 +94,4 @@ public sealed record AppOptions(
         ExportTicks: false,
         Quiet: false
     );
-
-    public static AppOptions FromArgs(Dictionary<string, string> args)
-    {
-        var d = Defaults;
-
-        var instrument = args.GetValueOrDefault("instrument", d.Instrument);
-        var instruments = args.GetValueOrDefault("symbols", d.Instruments);
-        var digits = GetInt(args, "digits", d.Digits);
-        var digitsMap = args.GetValueOrDefault("digits-map", d.DigitsMap);
-        var timeframe = args.GetValueOrDefault("timeframe", d.Timeframe);
-        var dataPoolPath = args.GetValueOrDefault("pool", d.DataPoolPath);
-        var outputPath = args.GetValueOrDefault("output", d.OutputPath);
-        var instrumentsPath = args.GetValueOrDefault("instruments", d.InstrumentsPath);
-        var httpConfigPath = args.GetValueOrDefault("http", d.HttpConfigPath);
-
-        var start = DateTimeParser.TryParse(args.GetValueOrDefault("start"), d.Start);
-        var end = DateTimeParser.TryParse(args.GetValueOrDefault("end"), d.End);
-
-        var mode = args.GetValueOrDefault("mode");
-        var downloadMode = mode?.Equals("direct", StringComparison.OrdinalIgnoreCase) == true
-            ? DownloadMode.DirectM1
-            : mode?.Equals("ticks", StringComparison.OrdinalIgnoreCase) == true
-                ? DownloadMode.TickToM1
-                : d.DownloadMode;
-
-        var format = args.GetValueOrDefault("format");
-        var outputFormat = format?.ToLowerInvariant() switch
-        {
-            "csv" => OutputFormat.CsvOnly,
-            "csv+hst" => OutputFormat.CsvHst,
-            "none" => OutputFormat.None,
-            _ => OutputFormat.CsvHst
-        };
-
-        var offset = TimeSpanParser.TryParse(args.GetValueOrDefault("offset"), d.UtcOffset);
-        // Verbose is opt-in (--verbose); default is quieter so progress bars
-        // can render without URL spam interleaving them.
-        var verbose = args.ContainsKey("verbose");
-        // Quiet is the kill switch — silences progress bars too, not just URLs.
-        var quiet = args.ContainsKey("quiet");
-        var nonInteractive = args.ContainsKey("no-prompt");
-        var sessionConfigPath = args.GetValueOrDefault("session-config", d.SessionConfigPath);
-
-        var refreshCache = GetBool(args, "refresh", !args.ContainsKey("no-refresh"));
-        var recentRefreshDays = GetInt(args, "recent-refresh-days", d.RecentRefreshDays);
-        var verifyChecksum = GetBool(args, "verify-checksum", !args.ContainsKey("no-verify-checksum"));
-        var deduplicateTicks = GetBool(args, "dedupe", !args.ContainsKey("no-dedupe"));
-        var skipFallbackIfTicked = GetBool(args, "skip-fallback-overlap", !args.ContainsKey("allow-fallback-overlap"));
-        var repairGaps = GetBool(args, "repair-gaps", !args.ContainsKey("no-repair-gaps"));
-        var validateM1 = GetBool(args, "validate-m1", !args.ContainsKey("no-validate-m1"));
-        var validationTolerancePoints = GetInt(args, "validation-tolerance-points", d.ValidationTolerancePoints);
-        var useSessionCalendar = GetBool(args, "use-session-calendar", d.UseSessionCalendar);
-        if (args.ContainsKey("no-session-calendar"))
-        {
-            useSessionCalendar = false;
-        }
-
-        var exportTicks = GetBool(args, "export-ticks", d.ExportTicks);
-
-        return d with
-        {
-            Instrument = instrument,
-            Instruments = instruments,
-            Digits = digits,
-            DigitsMap = digitsMap,
-            Start = start,
-            End = end,
-            Timeframe = timeframe,
-            DownloadMode = downloadMode,
-            OutputFormat = outputFormat,
-            UtcOffset = offset,
-            DataPoolPath = dataPoolPath,
-            OutputPath = outputPath,
-            InstrumentsPath = instrumentsPath,
-            HttpConfigPath = httpConfigPath,
-            Verbose = verbose,
-            RefreshCache = refreshCache,
-            RecentRefreshDays = recentRefreshDays,
-            VerifyChecksum = verifyChecksum,
-            DeduplicateTicks = deduplicateTicks,
-            SkipFallbackIfTicked = skipFallbackIfTicked,
-            RepairGaps = repairGaps,
-            ValidateM1 = validateM1,
-            ValidationTolerancePoints = validationTolerancePoints,
-            UseSessionCalendar = useSessionCalendar,
-            SessionConfigPath = sessionConfigPath,
-            NonInteractive = nonInteractive,
-            ExportTicks = exportTicks,
-            Quiet = quiet
-        };
-    }
-
-    private static bool GetBool(Dictionary<string, string> args, string key, bool fallback)
-    {
-        if (!args.TryGetValue(key, out var value))
-        {
-            return fallback;
-        }
-
-        return value.Equals("true", StringComparison.OrdinalIgnoreCase)
-               || value.Equals("1", StringComparison.OrdinalIgnoreCase)
-               || value.Equals("yes", StringComparison.OrdinalIgnoreCase)
-               || value.Equals("y", StringComparison.OrdinalIgnoreCase)
-               || value.Equals("on", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static int GetInt(Dictionary<string, string> args, string key, int fallback)
-    {
-        if (!args.TryGetValue(key, out var value))
-        {
-            return fallback;
-        }
-
-        return int.TryParse(value, out var parsed) ? parsed : fallback;
-    }
 }
