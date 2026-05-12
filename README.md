@@ -1,8 +1,21 @@
-# HistoricalData
+# market-data-manager
 
-[![CI](https://github.com/sammirzagharcheh/-DukascopyHistoricalTickDownloader-/actions/workflows/ci.yml/badge.svg)](https://github.com/sammirzagharcheh/-DukascopyHistoricalTickDownloader-/actions/workflows/ci.yml)
+[![CI](https://github.com/Chust-dev/market-data-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Chust-dev/market-data-manager/actions/workflows/ci.yml)
 
-C# console app that downloads Dukascopy historical tick data (.bi5 LZMA), converts it to MT5 bars, and exports CSV + HST (MT5 build 5430 compatible layout). Uses a local data pool to cache raw Dukascopy files for incremental updates.
+A C# CLI that **downloads historical FX tick data from Dukascopy, caches it
+locally as a reusable `.bi5` pool, and projects that pool into MT5-compatible
+bar and tick files** (CSV + HST, MT5 build 5430 layout). Designed for the
+"download once, export many times at many timeframes" backtest workflow.
+
+```
+   Dukascopy hourly .bi5     ──► local .bi5 cache  ──► M1/H1/D1/... CSV+HST
+   Dukascopy daily M1 .bi5                              per-month tick CSVs (MT5)
+       (network, slow)         (fast, reusable)         (instant, offline)
+                ▲                       │
+                │                       └── re-export at any new timeframe
+                │                           without re-fetching
+                └── refreshed weekly via `cache catchup`
+```
 
 ## Requirements
 
@@ -59,22 +72,28 @@ The tool is organized around the **`.bi5` data pool as the central asset**,
 with three independent pillars rotating around it:
 
 ```text
-                    ┌──────────────────────┐
-                    │   .bi5 data pool     │
-                    │  (D:\MarketData)     │
-                    └──────────┬───────────┘
-                               │
-        ┌──────────────────────┼──────────────────────┐
-        │                      │                      │
-        ▼                      ▼                      ▼
-┌───────────────┐     ┌────────────────┐    ┌─────────────────┐
-│   Download    │     │     Manage     │    │     Export      │
-│   (network)   │     │  (inspect/fix) │    │  (read + write) │
-│   fills cache │     │ inspects cache │    │ projects cache  │
-└───────────────┘     └────────────────┘    └─────────────────┘
-   `cache update`       `cache audit`         `export bars`
-                        `cache verify`        `export ticks`
-                        `cache discover`
+                            ┌──────────────────────┐
+                            │   .bi5 data pool     │
+                            │   (D:\MarketData)    │
+                            └──────────┬───────────┘
+                                       │
+                ┌──────────────────────┼──────────────────────┐
+                │                      │                      │
+                ▼                      ▼                      ▼
+        ┌───────────────┐     ┌────────────────┐    ┌─────────────────┐
+        │   Download    │     │     Manage     │    │     Export      │
+        │   (network)   │     │ (inspect/fix)  │    │   (cache-only)  │
+        │   fills cache │     │ inspects cache │    │ projects cache  │
+        └───────────────┘     └────────────────┘    └─────────────────┘
+        ─────────────────     ─────────────────     ─────────────────
+        cache update          cache audit           export bars
+        cache catchup         cache size            export ticks
+                              cache discover
+                              cache add-symbol
+                              cache remove-symbol
+                              cache verify
+                              cache repair
+                              cache cleanup
 ```
 
 **Download** is the only pillar that reaches the network for *bulk*
@@ -117,12 +136,15 @@ trigger downloads. Each subcommand calls exactly one pillar.
 ### Option B: Build from Source
 
 1. Install the .NET 10 SDK.
-2. Open a terminal in the project folder.
-3. Run:
+2. Open a terminal in the project root.
+3. The CLI is invoked via `dotnet run --project src/ConsoleApp/HistoricalData.csproj -- <subcommand>`.
+   For example, to see the subcommand list:
 
 ```text
-dotnet run --project src/ConsoleApp/HistoricalData.csproj
+dotnet run --project src/ConsoleApp/HistoricalData.csproj -- --help
 ```
+
+Running the binary with no arguments also prints the same help text and exits 1.
 
 ### Quick Start Example
 
@@ -266,6 +288,132 @@ dotnet run --project src/ConsoleApp/HistoricalData.csproj -- export bars \
     --instrument EURUSD --start 2025-01-01T00:00:00Z --end 2025-01-03T00:00:00Z \
     --timeframe h1 --format csv+hst \
     --pool /DataPool --output ./output --no-prompt
+```
+
+## Typical workflows
+
+End-to-end recipes for the most common scenarios. All examples assume
+`--pool D:\MarketData` (Windows) or `--pool ./DataPool` (Linux/macOS).
+
+### Fresh setup
+
+First time using the tool — discover which symbols Dukascopy has data
+for, fill the cache for a date range, then export it.
+
+```
+   ┌─ 1. discover ─┐    ┌─ 2. update ──┐    ┌─ 3. export ──┐
+   │ binary-search │ ─► │ download the │ ─► │ aggregate to │
+   │ Dukascopy for │    │ tick + M1    │    │ M1/H1/D1     │
+   │ earliest date │    │ files for    │    │ CSV+HST      │
+   │ per symbol    │    │ the range    │    │              │
+   └───────────────┘    └──────────────┘    └──────────────┘
+        ↓                     ↓                    ↓
+   instruments.json       D:\MarketData\        ./output\
+   (earliest:)            EURUSD\2025\01\01\    EURUSD_m1.csv
+                          {00..23}h_ticks.bi5    EURUSD_m1.hst
+```
+
+```text
+# 1. Probe Dukascopy for the earliest available date per symbol
+cache discover --symbols all --refresh
+
+# 2. Fill the cache for your backtest range
+cache update --instrument EURUSD --start 2024-01-01 --end 2025-01-01
+
+# 3. Export bars (re-run with different --timeframe at zero network cost)
+export bars --instrument EURUSD --start 2024-01-01 --end 2025-01-01 \
+    --timeframe m1 --format csv+hst --output ./output
+```
+
+### Weekly maintenance
+
+Keep the cache fresh for ongoing backtests. Designed for cron / Task
+Scheduler — `--symbols all --no-prompt --quiet` makes it cron-friendly.
+
+```text
+# Refreshes the rolling last-60-day window for every symbol in
+# instruments.json. Idempotent; safe to re-run.
+cache catchup --symbols all --no-prompt --quiet
+```
+
+`cache catchup` is just `cache update` with `--recent-refresh-days`
+sized to the rolling window. Override the window with `--window 30`
+for a tighter refresh, or `--window 90` for a wider one.
+
+### Multi-timeframe export from one cache
+
+You have an EURUSD cache from earlier and want to backtest at M5, M15,
+H1, and H4 — re-run `export bars` four times with no network:
+
+```text
+for tf in m5 m15 h1 h4 ; do
+    export bars --instrument EURUSD --start 2024-01-01 --end 2025-01-01 \
+        --timeframe $tf --format csv+hst --output ./output
+done
+```
+
+Or on Windows PowerShell:
+
+```pwsh
+foreach ($tf in @('m5', 'm15', 'h1', 'h4')) {
+    dotnet run --project src/ConsoleApp/HistoricalData.csproj -- export bars `
+        --instrument EURUSD --start 2024-01-01 --end 2025-01-01 `
+        --timeframe $tf --format csv+hst --output ./output
+}
+```
+
+### Cache health check
+
+Before a long backtest, confirm the cache hasn't silently rotted:
+
+```
+   ┌─ 1. cache verify ─┐    ┌─ 2. cache repair ─┐
+   │ recompute SHA-256 │    │ refetch flagged   │
+   │ vs .meta.json     │ ─► │ files from        │
+   │ sidecar           │    │ Dukascopy         │
+   └───────────────────┘    └───────────────────┘
+        exits 0 if clean        exits 0 if every
+        exits 1 if drift        problem resolved
+```
+
+```text
+# Local check (no network) — recomputes hashes, flags any drift
+cache verify --symbols all --quiet
+
+# If verify exit code != 0, repair the flagged files
+cache repair --symbols all --dry-run    # preview first
+cache repair --symbols all              # actually do it
+```
+
+For source-side drift detection (Dukascopy occasionally amends recent
+ticks), add `--remote`:
+
+```text
+cache verify --instrument EURUSD --start 2024-10-01 --end 2025-01-01 --remote
+```
+
+### Broker-aligned exports for live-broker backtests
+
+When the backtest target is a broker whose server-time observes DST
+(e.g. IC Markets at GMT+2/+3 with US DST), use `--broker` instead of
+a fixed `--offset` so a single export spanning a DST transition gets
+correctly-stamped bars on both sides:
+
+```text
+export bars --instrument EURUSD --start 2025-01-01 --end 2026-01-01 \
+    --timeframe m15 --broker ic-markets --format csv+hst --output ./output
+```
+
+For per-bar spread modelling, pick the right reduction:
+
+```text
+# Worst-case spread per bar (risk modelling)
+export bars --instrument EURUSD --start 2024-01-01 --end 2025-01-01 \
+    --timeframe m15 --spread-method min --broker ic-markets --output ./output
+
+# Typical spread per bar (representative backtest)
+export bars --instrument EURUSD --start 2024-01-01 --end 2025-01-01 \
+    --timeframe m15 --spread-method median --broker ic-markets --output ./output
 ```
 
 ## Config

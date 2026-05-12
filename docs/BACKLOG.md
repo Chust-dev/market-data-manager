@@ -48,10 +48,13 @@ backtesting against a real broker setup.
 | 15 | DST-aware broker offset (`--broker ic-markets`) | done | `BrokerOffset` type with `.Fixed(TimeSpan)` and `.IcMarkets` factories; US DST rule (2nd Sun Mar → 1st Sun Nov) hand-coded for platform portability; verified across both 2026 transitions; `--broker` and `--offset` mutually exclusive |
 | 43 | Configurable spread aggregation method (`--spread-method`) | done | `SpreadMethod` enum + `SpreadAccumulator` value type; method applied at BOTH M1 aggregation and M1→higher-TF resample; default `last` preserves legacy M1 byte-identical; mean rounds half-away-from-zero; negative spreads preserved as signed samples; fallback merge keeps `Math.Max` (Q3=3a — worst-case wins under `--allow-fallback-overlap`) |
 
-## Session D — public-tool polish (later)
+## Session D — public-tool polish (closing for v0.1.0)
 
 Goal: prepare the tool for users who aren't us. Removes legacy cruft,
-adds discoverability, and cleans up cosmetic papercuts.
+adds discoverability, and cleans up cosmetic papercuts. Only **#39
+(package as dotnet tool)** remains before v0.1.0 cuts. #56 (duplicate
+ProgressBar render on Ctrl+C cancel) is a known cosmetic issue that
+ships as documented in the v0.1.0 release notes.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
