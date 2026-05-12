@@ -59,8 +59,6 @@ adds discoverability, and cleans up cosmetic papercuts.
 | 39 | Package as dotnet tool for cross-platform install | pending | `dotnet tool install -g HistoricalData.cli` |
 | 51 | Differentiated output for single-symbol vs multi-symbol runs | done | per-symbol `=== SYM ===` header and `Batch summary:` block suppressed when N=1; cancellation banner always prints regardless of count. Gated in all three pillars (BarExporter, TickExporter, Downloader) and the legacy flat-flag CLI in `Program.cs`. New `SingleSymbolOutputTests` capture stdout to pin the behaviour. |
 | 56 | Fix duplicate ProgressBar render on Ctrl+C cancel | pending | cosmetic, ~15 lines |
-| 57 | Redesign `cache audit --by-year` layout for wide pools | pending | 23 years × 29 symbols at ~7 chars per cell is ~200 cols wide and wraps awkwardly. Options on the table: compact unicode heatmap (1 char/year), chunked 8-year pages, per-symbol gap summary, CSV output. User deferred decision. |
-| 58 | `cache size --csv` / `--output PATH` follow-up | pending | Text version of #23 shipped without CSV; add `--csv` flag to emit machine-readable rows (integer bytes, Symbol[,Year],SizeBytes,Files) and `--output PATH` to write to a file instead of stdout |
 | 59 | `cache cleanup --purge --instrument SYM` | done | Closes the remove-symbol → reclaim-disk-space gap. Recursive delete of the symbol's pool subdirectory with `--dry-run` preview; path-traversal-safe; refuses without explicit symbol filter |
 
 ## Release
@@ -88,6 +86,8 @@ Out of scope for the v0.1.0 push but not abandoned.
 | # | Task | Reason parked |
 |---|------|---------------|
 | 27 | `cache migrate` — pool layout migration | No layout change planned |
+| 57 | Redesign `cache audit --by-year` layout for wide pools | User declined on 2026-05-12: the current ~200-column-wide grid wraps awkwardly on narrow terminals but is workable on the user's typical wide window; none of the proposed alternatives (compact unicode heatmap, chunked 8-year pages, per-symbol gap summary, CSV output) earn the complexity for the current pool size. Re-open if the pool grows enough that a different layout becomes practically necessary. |
+| 58 | `cache size --csv` / `--output PATH` follow-up | User declined on 2026-05-12: the text output from #23 is sufficient for occasional disk-usage spot checks and there's no programmatic consumer asking for machine-readable rows. Re-open if a downstream tool (Grafana scrape, capacity-planning script) actually needs to parse cache size output. |
 
 ## Parked — Export
 
