@@ -47,7 +47,6 @@ backtesting against a real broker setup.
 |---|------|--------|-------|
 | 15 | DST-aware broker offset (`--broker ic-markets`) | done | `BrokerOffset` type with `.Fixed(TimeSpan)` and `.IcMarkets` factories; US DST rule (2nd Sun Mar → 1st Sun Nov) hand-coded for platform portability; verified across both 2026 transitions; `--broker` and `--offset` mutually exclusive |
 | 43 | Configurable spread aggregation method (`--spread-method`) | done | `SpreadMethod` enum + `SpreadAccumulator` value type; method applied at BOTH M1 aggregation and M1→higher-TF resample; default `last` preserves legacy M1 byte-identical; mean rounds half-away-from-zero; negative spreads preserved as signed samples; fallback merge keeps `Math.Max` (Q3=3a — worst-case wins under `--allow-fallback-overlap`) |
-| 44 | Companion spread-detail CSV (per-bar spread analytics) | pending | for spread modelling in backtests |
 
 ## Session D — public-tool polish (later)
 
@@ -106,6 +105,7 @@ Out of scope for the v0.1.0 push but not abandoned.
 | 41 | Configurable tick CSV split (`--tick-split month\|quarter\|year\|none`) | Monthly is good enough |
 | 42 | Generate MQL5 import script alongside tick CSVs | Speculative |
 | 45 | Fixed broker-spread override (`--spread SYM=N` or `spreads.json`) | #43 is the cleaner path |
+| 44 | Companion spread-detail CSV (per-bar spread analytics) | User judged unnecessary on 2026-05-12: `--spread-method` from #43 already lets the user pick the right reduction for each export, and the multi-stat per-bar breakdown adds complexity without a concrete backtest workflow asking for it. Re-open if a backtester actually needs side-by-side last/min/mean/median per bar. |
 
 ## Parked — Cross-cutting
 
