@@ -857,6 +857,10 @@ To generate the base64 value locally (PowerShell):
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("path\\to\\certificate.pfx"))
 ```
 
+## License
+
+MIT — see [LICENSE](LICENSE). Free to fork, vendor into your own backtest pipelines, modify, and redistribute. No warranty.
+
 ## Tests
 
 ```text

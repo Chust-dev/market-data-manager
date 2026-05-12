@@ -23,6 +23,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/Chust-dev/market-data-manager</PackageProjectUrl>
     <PackageTags>dukascopy;forex;fx;mt5;metatrader;historical-data;tick-data;cli;dotnet-tool</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
