@@ -1,3 +1,5 @@
+using HistoricalData.Export;
+
 namespace HistoricalData.Commands.Options;
 
 /// <summary>
@@ -15,7 +17,7 @@ internal sealed record BarExportOptions(
     DateTimeOffset End,
     string Timeframe,
     OutputFormat OutputFormat,
-    TimeSpan UtcOffset,
+    BrokerOffset Offset,
     string PoolPath,
     string OutputPath,
     string HttpConfigPath,
@@ -40,7 +42,7 @@ internal sealed record BarExportOptions(
             End: end,
             Timeframe: CommonParsingHelpers.ParseTimeframe(args),
             OutputFormat: CommonParsingHelpers.ParseOutputFormat(args),
-            UtcOffset: CommonParsingHelpers.ParseUtcOffset(args),
+            Offset: CommonParsingHelpers.ParseBrokerOffset(args),
             PoolPath: CommonParsingHelpers.ParsePoolPath(args),
             OutputPath: CommonParsingHelpers.ParseOutputPath(args),
             HttpConfigPath: CommonParsingHelpers.ParseHttpConfigPath(args),

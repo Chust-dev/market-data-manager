@@ -1,9 +1,11 @@
+using HistoricalData.Export;
+
 namespace HistoricalData.Commands.Options;
 
 /// <summary>
 /// Typed options for `export ticks`. The smallest of the export options
 /// — tick export only cares about which symbols, what date range, what
-/// UTC offset, and where to write. No timeframe (always tick-by-tick),
+/// offset, and where to write. No timeframe (always tick-by-tick),
 /// no format selection (always tick CSV in MT5 import format), no
 /// aggregator settings (the export pass walks .bi5 files directly,
 /// bypassing the bar aggregator).
@@ -13,7 +15,7 @@ internal sealed record TickExportOptions(
     string Instruments,
     DateTimeOffset Start,
     DateTimeOffset End,
-    TimeSpan UtcOffset,
+    BrokerOffset Offset,
     string PoolPath,
     string OutputPath,
     string HttpConfigPath,
@@ -32,7 +34,7 @@ internal sealed record TickExportOptions(
             Instruments: CommonParsingHelpers.ParseInstruments(args),
             Start: start,
             End: end,
-            UtcOffset: CommonParsingHelpers.ParseUtcOffset(args),
+            Offset: CommonParsingHelpers.ParseBrokerOffset(args),
             PoolPath: CommonParsingHelpers.ParsePoolPath(args),
             OutputPath: CommonParsingHelpers.ParseOutputPath(args),
             HttpConfigPath: CommonParsingHelpers.ParseHttpConfigPath(args),

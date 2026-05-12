@@ -173,7 +173,7 @@ internal sealed class Downloader
         // Throwaway aggregator — discarded after the call returns.
         // The DownloadTicksAndAggregate API requires it for now.
         var aggregator = new BarAggregator(
-            "m1", digits, TimeSpan.Zero, filterWeekends: true,
+            "m1", digits, BrokerOffset.Fixed(TimeSpan.Zero), filterWeekends: true,
             startUtc, endUtc, deduplicateTicks: true, skipFallbackIfTicked: true,
             sessionCalendar: null);
 
@@ -206,7 +206,7 @@ internal sealed class Downloader
         if (options.RepairGaps && options.DownloadMode == DownloadMode.TickToM1)
         {
             var repairAggregator = new BarAggregator(
-                "m1", digits, TimeSpan.Zero, filterWeekends: true,
+                "m1", digits, BrokerOffset.Fixed(TimeSpan.Zero), filterWeekends: true,
                 startUtc, endUtc, deduplicateTicks: false, skipFallbackIfTicked: true,
                 sessionCalendar: null);
             var repairSummary = new SummaryReport();
@@ -228,7 +228,7 @@ internal sealed class Downloader
         if (options.ValidateM1 && options.DownloadMode == DownloadMode.TickToM1)
         {
             var validateAggregator = new BarAggregator(
-                "m1", digits, TimeSpan.Zero, filterWeekends: true,
+                "m1", digits, BrokerOffset.Fixed(TimeSpan.Zero), filterWeekends: true,
                 startUtc, endUtc, deduplicateTicks: false, skipFallbackIfTicked: false,
                 sessionCalendar: null);
             var validateSummary = new SummaryReport();

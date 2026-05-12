@@ -28,7 +28,7 @@ public sealed class TickCsvWriter : IDisposable
 
     private readonly string _outputDir;
     private readonly string _symbol;
-    private readonly TimeSpan _utcOffset;
+    private readonly BrokerOffset _broker;
     private readonly string _priceFormat;
 
     private StreamWriter? _writer;
@@ -36,15 +36,16 @@ public sealed class TickCsvWriter : IDisposable
     private long _ticksWritten;
     private int _filesOpened;
 
-    public TickCsvWriter(string outputDir, string symbol, int digits, TimeSpan utcOffset)
+    public TickCsvWriter(string outputDir, string symbol, int digits, BrokerOffset broker)
     {
         if (string.IsNullOrWhiteSpace(outputDir)) throw new ArgumentException("outputDir is required", nameof(outputDir));
         if (string.IsNullOrWhiteSpace(symbol)) throw new ArgumentException("symbol is required", nameof(symbol));
         if (digits < 0 || digits > 8) throw new ArgumentOutOfRangeException(nameof(digits));
+        ArgumentNullException.ThrowIfNull(broker);
 
         _outputDir = outputDir;
         _symbol = symbol.ToUpperInvariant();
-        _utcOffset = utcOffset;
+        _broker = broker;
         _priceFormat = "F" + digits;
         Directory.CreateDirectory(outputDir);
     }
@@ -55,7 +56,7 @@ public sealed class TickCsvWriter : IDisposable
 
     public void Write(Tick tick)
     {
-        var local = tick.Time + _utcOffset;
+        var local = tick.Time + _broker.At(tick.Time);
         var monthKey = local.ToString("yyyy-MM", CultureInfo.InvariantCulture);
         if (monthKey != _currentMonthKey)
         {

@@ -1,4 +1,5 @@
 using System.Globalization;
+using HistoricalData.Export;
 using HistoricalData.Utils;
 
 namespace HistoricalData.Commands;
@@ -66,6 +67,41 @@ internal static class CommonParsingHelpers
 
     public static TimeSpan ParseUtcOffset(IReadOnlyDictionary<string, string> args) =>
         TimeSpanParser.TryParse(args.GetValueOrDefault("offset"), D.UtcOffset);
+
+    /// <summary>
+    /// Resolve the UTC → server-local offset for an export command from the
+    /// argMap. Accepts either <c>--broker NAME</c> (DST-aware preset) or
+    /// <c>--offset +HH:MM</c> (literal fixed offset), but not both. Default
+    /// when neither is passed: <c>BrokerOffset.Fixed(TimeSpan.Zero)</c> —
+    /// timestamps stay in UTC.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when both flags are present, or when <c>--broker</c> names an
+    /// unknown broker (message lists <see cref="BrokerOffset.KnownNames"/>).
+    /// </exception>
+    public static BrokerOffset ParseBrokerOffset(IReadOnlyDictionary<string, string> args)
+    {
+        var hasBroker = args.TryGetValue("broker", out var brokerName) && !string.IsNullOrWhiteSpace(brokerName);
+        var hasOffset = args.TryGetValue("offset", out var offsetRaw) && !string.IsNullOrWhiteSpace(offsetRaw);
+
+        if (hasBroker && hasOffset)
+        {
+            throw new ArgumentException("--broker and --offset are mutually exclusive; pick one.");
+        }
+
+        if (hasBroker)
+        {
+            var resolved = BrokerOffset.TryResolve(brokerName!);
+            if (resolved is null)
+            {
+                var known = string.Join(", ", BrokerOffset.KnownNames);
+                throw new ArgumentException($"Unknown broker '{brokerName}'. Known brokers: {known}.");
+            }
+            return resolved;
+        }
+
+        return BrokerOffset.Fixed(TimeSpanParser.TryParse(offsetRaw, D.UtcOffset));
+    }
 
     // -- Path parsers ---------------------------------------------------------
 

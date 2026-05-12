@@ -165,7 +165,7 @@ internal sealed class BarExporter
         var aggregator = new BarAggregator(
             "m1",
             digits,
-            options.UtcOffset,
+            options.Offset,
             filterWeekends: true,
             startUtc,
             endUtc,

@@ -950,7 +950,7 @@ public static class Program
         var aggregator = new BarAggregator(
             "m1",
             digits,
-            options.UtcOffset,
+            BrokerOffset.Fixed(options.UtcOffset),
             options.FilterWeekends,
             startUtc,
             endUtc,
@@ -994,7 +994,7 @@ public static class Program
             var repairAggregator = new BarAggregator(
                 "m1",
                 digits,
-                options.UtcOffset,
+                BrokerOffset.Fixed(options.UtcOffset),
                 options.FilterWeekends,
                 startUtc,
                 endUtc,
@@ -1034,7 +1034,7 @@ public static class Program
             var validateAggregator = new BarAggregator(
                 "m1",
                 digits,
-                options.UtcOffset,
+                BrokerOffset.Fixed(options.UtcOffset),
                 options.FilterWeekends,
                 startUtc,
                 endUtc,
@@ -1105,7 +1105,7 @@ public static class Program
 
         if (options.ExportTicks && options.DownloadMode == DownloadMode.TickToM1)
         {
-            using var tickWriter = new TickCsvWriter(outputPath, options.Instrument, digits, options.UtcOffset);
+            using var tickWriter = new TickCsvWriter(outputPath, options.Instrument, digits, BrokerOffset.Fixed(options.UtcOffset));
             var exportedTicks = await client.ExportTicksToCsvAsync(
                 options.Instrument,
                 startUtc,

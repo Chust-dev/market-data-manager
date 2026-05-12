@@ -1,5 +1,6 @@
 using HistoricalData;
 using HistoricalData.Commands.Options;
+using HistoricalData.Export;
 
 namespace HistoricalData.Tests;
 
@@ -151,13 +152,46 @@ public sealed class OptionsRecordTests
     }
 
     [Fact]
-    public void BarExportOptions_UtcOffsetOverride()
+    public void BarExportOptions_OffsetFlag_ProducesFixedOffset()
     {
         var args = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["offset"] = "+02:00"
         };
-        Assert.Equal(TimeSpan.FromHours(2), BarExportOptions.FromArgs(args).UtcOffset);
+        var offset = BarExportOptions.FromArgs(args).Offset;
+        Assert.Equal(TimeSpan.FromHours(2), offset.At(DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public void BarExportOptions_BrokerIcMarkets_ResolvesProfile()
+    {
+        var args = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["broker"] = "ic-markets"
+        };
+        Assert.Equal("ic-markets", BarExportOptions.FromArgs(args).Offset.Name);
+    }
+
+    [Fact]
+    public void BarExportOptions_UnknownBroker_Throws()
+    {
+        var args = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["broker"] = "bogus"
+        };
+        var ex = Assert.Throws<ArgumentException>(() => BarExportOptions.FromArgs(args));
+        Assert.Contains("ic-markets", ex.Message);
+    }
+
+    [Fact]
+    public void BarExportOptions_BrokerAndOffsetTogether_Throws()
+    {
+        var args = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["broker"] = "ic-markets",
+            ["offset"] = "+02:00"
+        };
+        Assert.Throws<ArgumentException>(() => BarExportOptions.FromArgs(args));
     }
 
     // -- TickExportOptions ---------------------------------------------------
@@ -169,7 +203,7 @@ public sealed class OptionsRecordTests
         var options = TickExportOptions.FromArgs(args);
 
         Assert.Equal(AppOptions.Defaults.Instrument, options.Instrument);
-        Assert.Equal(TimeSpan.Zero, options.UtcOffset);
+        Assert.Equal(TimeSpan.Zero, options.Offset.At(DateTimeOffset.UtcNow));
         Assert.Equal(AppOptions.Defaults.DataPoolPath, options.PoolPath);
         Assert.Equal(AppOptions.Defaults.OutputPath, options.OutputPath);
     }

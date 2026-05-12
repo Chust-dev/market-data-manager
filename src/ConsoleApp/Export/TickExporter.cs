@@ -75,7 +75,7 @@ internal sealed class TickExporter
 
                 await ExportTicksForInstrumentAsync(
                     client, instrument, digits,
-                    options.UtcOffset, outputPath,
+                    options.Offset, outputPath,
                     startUtc, endUtc, cts.Token);
                 succeeded++;
             }
@@ -120,7 +120,7 @@ internal sealed class TickExporter
         DukascopyClient client,
         string instrument,
         int digits,
-        TimeSpan utcOffset,
+        BrokerOffset broker,
         string outputPath,
         DateTimeOffset startUtc,
         DateTimeOffset endUtc,
@@ -129,7 +129,7 @@ internal sealed class TickExporter
         Console.WriteLine();
         Console.WriteLine($"=== {instrument} ===");
 
-        using var writer = new TickCsvWriter(outputPath, instrument, digits, utcOffset);
+        using var writer = new TickCsvWriter(outputPath, instrument, digits, broker);
         var exportedTicks = await client.ExportTicksToCsvAsync(
             instrument,
             startUtc,

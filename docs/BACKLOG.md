@@ -45,7 +45,7 @@ backtesting against a real broker setup.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 15 | DST-aware broker offset (`--broker ic-markets`) | pending | replaces static `--offset` for live-broker alignment |
+| 15 | DST-aware broker offset (`--broker ic-markets`) | done | `BrokerOffset` type with `.Fixed(TimeSpan)` and `.IcMarkets` factories; US DST rule (2nd Sun Mar → 1st Sun Nov) hand-coded for platform portability; verified across both 2026 transitions; `--broker` and `--offset` mutually exclusive |
 | 43 | Configurable spread aggregation method (`--spread-method`) | pending | last / median / mean / min |
 | 44 | Companion spread-detail CSV (per-bar spread analytics) | pending | for spread modelling in backtests |
 

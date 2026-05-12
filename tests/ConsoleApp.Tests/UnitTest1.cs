@@ -14,7 +14,7 @@ public sealed class CoreTests
     {
         var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var end = start.AddMinutes(1);
-        var aggregator = new BarAggregator("m1", 5, TimeSpan.Zero, filterWeekends: true, start, end);
+        var aggregator = new BarAggregator("m1", 5, BrokerOffset.Fixed(TimeSpan.Zero), filterWeekends: true, start, end);
 
         aggregator.AddTick(new Tick(start.AddSeconds(1), 1.23456, 1.23466, 1.0f, 1.0f));
         aggregator.AddTick(new Tick(start.AddSeconds(30), 1.23450, 1.23460, 1.0f, 1.0f));
@@ -35,7 +35,7 @@ public sealed class CoreTests
     {
         var saturday = new DateTimeOffset(2025, 1, 4, 0, 0, 0, TimeSpan.Zero);
         var end = saturday.AddMinutes(1);
-        var aggregator = new BarAggregator("m1", 5, TimeSpan.Zero, filterWeekends: true, saturday, end);
+        var aggregator = new BarAggregator("m1", 5, BrokerOffset.Fixed(TimeSpan.Zero), filterWeekends: true, saturday, end);
 
         aggregator.AddTick(new Tick(saturday.AddSeconds(5), 1.11111, 1.11121, 1.0f, 1.0f));
 
@@ -48,7 +48,7 @@ public sealed class CoreTests
     {
         var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var end = start.AddMinutes(1);
-        var aggregator = new BarAggregator("m1", 5, TimeSpan.Zero, filterWeekends: false, start, end, deduplicateTicks: true);
+        var aggregator = new BarAggregator("m1", 5, BrokerOffset.Fixed(TimeSpan.Zero), filterWeekends: false, start, end, deduplicateTicks: true);
 
         var tick = new Tick(start.AddSeconds(10), 1.23456, 1.23466, 1.0f, 1.0f);
         aggregator.AddTick(tick);
@@ -65,7 +65,7 @@ public sealed class CoreTests
     {
         var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var end = start.AddMinutes(1);
-        var aggregator = new BarAggregator("m1", 5, TimeSpan.Zero, filterWeekends: false, start, end, deduplicateTicks: true, skipFallbackIfTicked: true);
+        var aggregator = new BarAggregator("m1", 5, BrokerOffset.Fixed(TimeSpan.Zero), filterWeekends: false, start, end, deduplicateTicks: true, skipFallbackIfTicked: true);
 
         aggregator.AddTick(new Tick(start.AddSeconds(5), 1.1, 1.2, 1.0f, 1.0f));
         aggregator.AddBar(new Bar(start, 1.0, 1.3, 0.9, 1.2, 100, 1, 1));
@@ -81,7 +81,7 @@ public sealed class CoreTests
     {
         var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var end = start.AddMinutes(1);
-        var aggregator = new BarAggregator("m1", 5, TimeSpan.Zero, filterWeekends: false, start, end, deduplicateTicks: false, skipFallbackIfTicked: true);
+        var aggregator = new BarAggregator("m1", 5, BrokerOffset.Fixed(TimeSpan.Zero), filterWeekends: false, start, end, deduplicateTicks: false, skipFallbackIfTicked: true);
 
         var bar = new Bar(start, 1.0, 1.1, 0.9, 1.05, 10, 1, 1);
         Assert.True(aggregator.TryAddFallbackBar(bar, onlyIfMissing: true));

@@ -11,7 +11,7 @@ public sealed class BarAggregator
     private readonly HashSet<long> _minutesWithFallbackBars = new();
     private readonly int _digits;
     private readonly double _scale;
-    private readonly TimeSpan _utcOffset;
+    private readonly BrokerOffset _broker;
     private readonly bool _filterWeekends;
     private readonly bool _deduplicateTicks;
     private readonly bool _skipFallbackIfTicked;
@@ -22,7 +22,7 @@ public sealed class BarAggregator
     public BarAggregator(
         string timeframe,
         int digits,
-        TimeSpan utcOffset,
+        BrokerOffset broker,
         bool filterWeekends,
         DateTimeOffset startUtc,
         DateTimeOffset endUtc,
@@ -33,13 +33,13 @@ public sealed class BarAggregator
         Timeframe = timeframe;
         _digits = digits;
         _scale = Math.Pow(10, digits);
-        _utcOffset = utcOffset;
+        _broker = broker;
         _filterWeekends = filterWeekends;
         _deduplicateTicks = deduplicateTicks;
         _skipFallbackIfTicked = skipFallbackIfTicked;
         _sessionCalendar = sessionCalendar;
-        _startServer = startUtc.ToOffset(utcOffset);
-        _endServer = endUtc.ToOffset(utcOffset);
+        _startServer = startUtc.ToOffset(broker.At(startUtc));
+        _endServer = endUtc.ToOffset(broker.At(endUtc));
     }
 
     public string Timeframe { get; }
@@ -48,7 +48,7 @@ public sealed class BarAggregator
 
     public void AddTick(Tick tick)
     {
-        var serverTime = tick.Time.ToOffset(_utcOffset);
+        var serverTime = tick.Time.ToOffset(_broker.At(tick.Time));
         if (!IsInRange(serverTime))
         {
             return;
@@ -90,7 +90,8 @@ public sealed class BarAggregator
 
         if (!_bars.TryGetValue(minuteKey, out var builder))
         {
-            var minuteTime = DateTimeOffset.FromUnixTimeSeconds(minuteKey * 60).ToOffset(_utcOffset);
+            var minuteUtc = DateTimeOffset.FromUnixTimeSeconds(minuteKey * 60);
+            var minuteTime = minuteUtc.ToOffset(_broker.At(minuteUtc));
             builder = new BarBuilder(minuteTime, _scale);
             _bars[minuteKey] = builder;
         }
@@ -105,7 +106,7 @@ public sealed class BarAggregator
 
     public bool TryAddFallbackBar(Bar bar, bool onlyIfMissing)
     {
-        var serverTime = bar.Time.ToOffset(_utcOffset);
+        var serverTime = bar.Time.ToOffset(_broker.At(bar.Time));
         if (!IsInRange(serverTime))
         {
             return false;
@@ -135,7 +136,8 @@ public sealed class BarAggregator
 
         if (!_bars.TryGetValue(minuteKey, out var builder))
         {
-            var minuteTime = DateTimeOffset.FromUnixTimeSeconds(minuteKey * 60).ToOffset(_utcOffset);
+            var minuteUtc = DateTimeOffset.FromUnixTimeSeconds(minuteKey * 60);
+            var minuteTime = minuteUtc.ToOffset(_broker.At(minuteUtc));
             builder = new BarBuilder(minuteTime, _scale);
             _bars[minuteKey] = builder;
         }
