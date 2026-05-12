@@ -55,7 +55,6 @@ adds discoverability, and cleans up cosmetic papercuts.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 18 | Weekly catch-up wrapper script (`update.ps1`) | pending | double-clickable; calls `cache catchup --symbols all --no-prompt --quiet` |
 | 38 | Remove legacy flat-flag CLI; subcommands become the only path | pending | breaking change; locks in v0.1.0 |
 | 39 | Package as dotnet tool for cross-platform install | pending | `dotnet tool install -g HistoricalData.cli` |
 | 51 | Differentiated output for single-symbol vs multi-symbol runs | done | per-symbol `=== SYM ===` header and `Batch summary:` block suppressed when N=1; cancellation banner always prints regardless of count. Gated in all three pillars (BarExporter, TickExporter, Downloader) and the legacy flat-flag CLI in `Program.cs`. New `SingleSymbolOutputTests` capture stdout to pin the behaviour. |
@@ -115,6 +114,7 @@ Out of scope for the v0.1.0 push but not abandoned.
 | 35 | Notification on completion (`--notify discord:url`) | Wrapper script can do this |
 | 36 | Logging to file with rotation | Output redirection works fine |
 | 37 | Self-update check on startup | Not a daily-use tool yet |
+| 18 | Weekly catch-up wrapper script (`update.ps1` / `update.cmd`) | User declined on 2026-05-12: doesn't want a double-clickable wrapper around `cache catchup`. The underlying command is short enough to type, alias, or schedule directly via Task Scheduler with no intermediate script. Re-open if a non-technical user is ever expected to trigger weekly maintenance. |
 
 ## Known issues (currently shipped)
 
