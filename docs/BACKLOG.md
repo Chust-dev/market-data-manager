@@ -68,7 +68,7 @@ v0.1.0 release notes.
 
 | # | Task | Status |
 |---|------|--------|
-| 46 | Cut v0.1.0 release on GitHub (after Sessions A–D land) | pending |
+| 46 | Cut v0.1.0 release on GitHub (after Sessions A–D land) | done — published 2026-05-12 at https://github.com/Chust-dev/market-data-manager/releases/tag/v0.1.0 |
 | 47 | Per-version release cadence (post-v0.1.0) | pending |
 
 ## Parked — Download
